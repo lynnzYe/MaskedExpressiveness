@@ -34,3 +34,5 @@ coverage.xml
 
 # Translations
 *.mo
+
+.idea
