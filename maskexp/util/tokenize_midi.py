@@ -4,6 +4,7 @@ from maskexp.magenta.pipelines import performance_pipeline, note_sequence_pipeli
 from maskexp.magenta.contrib import training as contrib_training
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.util.play_midi import syn_perfevent, note_sequence_to_performance_events
+import numpy as np
 
 
 def translate_perf_data(seq_example):
@@ -92,7 +93,26 @@ def get_raw_performance(filepath):
     return note_sequence_to_performance_events(seq, steps_per_quarter=50)
 
 
-if __name__ == '__main__':
+def test_onehot():
+    midi_path = '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid'
+    config = performance_model.default_configs['performance_with_dynamics']
+    test = extract_tokens_from_midi(
+        midi_path,
+        config=config
+    )
+    for nth, t in enumerate(test):
+        # Should all offset by 1: Returns inputs and labels for the given event sequence.
+        # Input - one-hot encoded, output: label
+        if len(t['inputs']) != len(t['labels']):
+            raise ValueError("One hot encoding arr len must have the same length as label arr len")
+        for i in range(len(t['inputs'])):
+            if np.argmax(t['inputs'][i]) != t['labels'][i]:
+                print(str(nth) + "th entry does not match!")
+                break
+    return True
+
+
+def example():
     midi_path = '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid'
     config = performance_model.default_configs['performance_with_dynamics']
     test = extract_tokens_from_midi(
@@ -105,3 +125,14 @@ if __name__ == '__main__':
     # og_perf = get_raw_performance(midi_path)
     # syn_perfevent(og_perf, filename='og.wav', n_velocity_bin=127)
     # syn_perfevent(perf, filename='quantized.wav')
+
+
+def main():
+    example()
+    # test_onehot()
+
+    pass
+
+
+if __name__ == '__main__':
+    main()
