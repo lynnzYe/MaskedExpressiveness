@@ -7,6 +7,12 @@ from maskexp.util.play_midi import syn_perfevent, note_sequence_to_performance_e
 import numpy as np
 
 
+def onehot(label, nclass):
+    one_hot = [0.0] * nclass
+    one_hot[label] = 1.0
+    return one_hot
+
+
 def translate_perf_data(seq_example):
     feature_lists = seq_example.feature_lists
     result = {}
@@ -53,9 +59,19 @@ def get_noteseq(filepath):
     return note_seq.midi_io.midi_to_note_sequence(pm.PrettyMIDI(filepath))
 
 
-def extract_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
+def cleanup_perf_dict(perf_dict):
     """
+    Because magenta make 128 into [0~127, 1~128] for input/label pairs
+    We manually add the last token to inputs for Bert MLM training
+    :param perf_dict:
+    :return:
+    """
+    perf_dict['inputs'].append(onehot(perf_dict['labels'][-1], len(perf_dict['inputs'][0])))
 
+
+def extract_mlm_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
+    """
+    Extract tokens for Bert MLM training
     :param filepath:
     :param config:  performance_model.default_configs
     :return:
@@ -66,13 +82,14 @@ def extract_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
     seq = get_noteseq(filepath=filepath)
     pipeline_inst = performance_pipeline.get_pipeline(
         min_events=min_seq,
-        max_events=max_seq,
+        max_events=max_seq,  # Magenta will reduce input by 1 element and shift label by 1
         eval_ratio=0.1,
         config=config)
     result = pipeline_inst.transform(seq)
     token_list = []
     for e in result['training_performances']:
         perf_data = translate_perf_data(e)
+        cleanup_perf_dict(perf_data)  # Necessary
         token_list.append(perf_data)
     return token_list
 
@@ -96,7 +113,7 @@ def get_raw_performance(filepath):
 def test_onehot():
     midi_path = '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid'
     config = performance_model.default_configs['performance_with_dynamics']
-    test = extract_tokens_from_midi(
+    test = extract_mlm_tokens_from_midi(
         midi_path,
         config=config
     )
@@ -115,7 +132,7 @@ def test_onehot():
 def example():
     midi_path = '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid'
     config = performance_model.default_configs['performance_with_dynamics']
-    test = extract_tokens_from_midi(
+    test = extract_mlm_tokens_from_midi(
         midi_path,
         config=config
     )
