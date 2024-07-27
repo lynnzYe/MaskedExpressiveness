@@ -69,7 +69,7 @@ def cleanup_perf_dict(perf_dict):
     perf_dict['inputs'].append(onehot(perf_dict['labels'][-1], len(perf_dict['inputs'][0])))
 
 
-def extract_mlm_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
+def extract_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
     """
     Extract tokens for Bert MLM training
     :param filepath:
@@ -83,9 +83,10 @@ def extract_mlm_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32)
     pipeline_inst = performance_pipeline.get_pipeline(
         min_events=min_seq,
         max_events=max_seq,  # Magenta will reduce input by 1 element and shift label by 1
-        eval_ratio=0.1,
+        eval_ratio=0.0,
         config=config)
     result = pipeline_inst.transform(seq)
+    assert len(result['training_performances']) > 0
     token_list = []
     for e in result['training_performances']:
         perf_data = translate_perf_data(e)
@@ -113,7 +114,7 @@ def get_raw_performance(filepath):
 def test_onehot():
     midi_path = '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid'
     config = performance_model.default_configs['performance_with_dynamics']
-    test = extract_mlm_tokens_from_midi(
+    test = extract_tokens_from_midi(
         midi_path,
         config=config
     )
@@ -132,7 +133,7 @@ def test_onehot():
 def example():
     midi_path = '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid'
     config = performance_model.default_configs['performance_with_dynamics']
-    test = extract_mlm_tokens_from_midi(
+    test = extract_tokens_from_midi(
         midi_path,
         config=config
     )

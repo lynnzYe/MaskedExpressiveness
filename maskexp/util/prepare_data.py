@@ -3,11 +3,13 @@ Prepare training / evaluation / test data for Bert training
 """
 import random
 import note_seq
+import tqdm
 import numpy as np
 import torch
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-from tokenize_midi import extract_mlm_tokens_from_midi, onehot, decode_tokens
+from maskexp.util.tokenize_midi import extract_tokens_from_midi, onehot, decode_tokens
 from maskexp.magenta.models.performance_rnn import performance_model
+from maskexp.definitions import DATA_DIR
+from pathlib import Path
 
 PERF_PAD = 0
 
@@ -96,7 +98,7 @@ def prepare_one_midi_data(midi_path, perf_config=None, min_seq_len=64, max_seq_l
         perf_config = performance_model.default_configs['performance']
         raise ValueError("Config is required to use the tokenizer!")
 
-    tokens = extract_mlm_tokens_from_midi(midi_path, config=perf_config, min_seq=min_seq_len, max_seq=max_seq_len)
+    tokens = extract_tokens_from_midi(midi_path, config=perf_config, min_seq=min_seq_len, max_seq=max_seq_len)
     assert len(tokens) > 0
     attention_masks = []
     out_tokens = []
@@ -106,10 +108,10 @@ def prepare_one_midi_data(midi_path, perf_config=None, min_seq_len=64, max_seq_l
     return torch.tensor(out_tokens), torch.tensor(attention_masks)
 
 
-def is_special_token(token: int, decoder: note_seq.encoder_decoder.OneHotEncoding, special_class_ids=None):
+def get_special_token_mask(tokens: list, decoder: note_seq.encoder_decoder.OneHotEncoding, special_class_ids=None):
     """
     Determine if a token is special token
-    :param token:
+    :param tokens:
     :param decoder:
     :param special_class_ids:
     :return:
@@ -118,15 +120,12 @@ def is_special_token(token: int, decoder: note_seq.encoder_decoder.OneHotEncodin
         special_class_ids = (note_seq.PerformanceEvent.TIME_SHIFT,
                              note_seq.PerformanceEvent.VELOCITY,
                              note_seq.PerformanceEvent.DURATION)
-    event = decoder.decode_event(token)
-    if event.event_type in special_class_ids:
-        return True
-    return False
+    return [int(decoder.decode_event(e).event_type in special_class_ids) for e in tokens]
 
 
 def find_event_range(decoder, class_idx):
-    assert isinstance(decoder, note_seq.EventSequenceEncoderDecoder)
-    for e in decoder._one_hot_encoding._event_ranges:
+    assert isinstance(decoder, note_seq.encoder_decoder.OneHotEncoding)
+    for e in decoder._event_ranges:
         if e[0] == class_idx:
             return (note_seq.PerformanceEvent(event_type=class_idx,
                                               event_value=e[1]),
@@ -136,14 +135,14 @@ def find_event_range(decoder, class_idx):
 
 
 def random_token_walk(token_id, decoder, random_range=-1):
-    event = decoder._one_hot_encoding.decode_event(token_id)
+    event = decoder.decode_event(token_id)
     min_e, max_e = find_event_range(decoder, event.event_type)
     if random_range == -1:
         random_range = max_e.event_value
     assert min_e.event_value <= random_range <= max_e.event_value
 
-    min_class_id = decoder._one_hot_encoding.encode_event(min_e)
-    max_class_id = decoder._one_hot_encoding.encode_event(max_e)
+    min_class_id = decoder.encode_event(min_e)
+    max_class_id = decoder.encode_event(max_e)
 
     walk = random.uniform(-1 * min(random_range, token_id - min_class_id), min(random_range, max_class_id - token_id))
     result = int(token_id + walk)
@@ -176,32 +175,37 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
 
     # Obtain special tokens
     tokenizer = perf_config.encoder_decoder._one_hot_encoding
-    special_token_mask = [is_special_token(val, tokenizer, special_class_ids=special_ids)
+    special_token_mask = [get_special_token_mask(val, tokenizer, special_class_ids=special_ids)
                           for val in token_ids.tolist()]
     prob_matrix.masked_fill_(torch.tensor(special_token_mask, dtype=torch.bool), value=0.0)
     masked_indices = torch.bernoulli(prob_matrix).bool()
     labels[~masked_indices] = -100
 
-    # TODO: by rule - only timeshift random number etc., or roughly scaled (beat info preserved)
+    # TODO: Implement mechanism for timeshift
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-    token_ids[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
+    # default mask token is an unused midi
+    token_ids[indices_replaced] = tokenizer.encode_event(note_seq.PerformanceEvent(event_type=1, event_value=1))
 
     # Random work 10%
     indices_random = torch.bernoulli(torch.full(labels.shape, 0.1)).bool() & masked_indices & ~indices_replaced
-    random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
-    token_ids[indices_random] = random_words[indices_random]
+    indices_to_replace = torch.nonzero(indices_random, as_tuple=True)
+
+    for i in range(len(indices_to_replace[0])):
+        batch_idx = indices_to_replace[0][i].item()
+        seq_idx = indices_to_replace[1][i].item()
+        token_ids[batch_idx, seq_idx] = random_token_walk(token_ids[batch_idx, seq_idx].item(), tokenizer)
 
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
     return token_ids, labels
 
 
-def prepare_data(midi_file_list, train=0.8, val=0.1, test=0.1, batch_size=32, perf_config=None):
+def prepare_token_data(midi_file_list, train=0.8, val=0.1, perf_config=None, min_seq_len=64, max_seq_len=128):
     if perf_config is None:
         raise ValueError("Performance config must be provided")
     token_ids = []
     masks = []
-    for file in midi_file_list:
-        tk, msk = prepare_one_midi_data(file, perf_config=perf_config)
+    for file in tqdm.tqdm(midi_file_list):
+        tk, msk = prepare_one_midi_data(file, perf_config=perf_config, min_seq_len=min_seq_len, max_seq_len=max_seq_len)
         token_ids.extend(tk)
         masks.extend(msk)
     token_ids = torch.stack(token_ids, dim=0)
@@ -220,21 +224,26 @@ def prepare_data(midi_file_list, train=0.8, val=0.1, test=0.1, batch_size=32, pe
     val_labels = torch.zeros(val_size)
     test_labels = torch.zeros(test_size)
 
-    train_dataset = TensorDataset(train_ids, train_msks, train_labels)
-    val_dataset = TensorDataset(val_ids, val_msks, val_labels)
-    test_dataset = TensorDataset(test_ids, test_msks, test_labels)
-
-    train_dataloader = DataLoader(train_dataset, sampler=RandomSampler(train_dataset), batch_size=batch_size)
-    val_dataloader = DataLoader(val_dataset, sampler=SequentialSampler(val_dataset), batch_size=batch_size)
-    test_dataloader = DataLoader(test_dataset, sampler=SequentialSampler(test_dataset), batch_size=batch_size)
-
-    return train_dataloader, val_dataloader, test_dataloader
+    return {
+        'train': {'ids': train_ids, 'msks': train_msks, 'labels': train_labels},
+        'val': {'ids': val_ids, 'msks': val_msks, 'labels': val_labels},
+        'test': {'ids': test_ids, 'msks': test_msks, 'labels': test_labels}
+    }
 
 
-def test_prepare_data():
+def save_datadict(data, save_dir=DATA_DIR, save_name='dataset'):
+    path = Path(save_dir)
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=False)
+    torch.save(data, f'{save_dir}/{save_name}.pt')
+
+
+def test_prepare_token_data():
     midi_path = '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid'
     perf_config = performance_model.default_configs['performance']
-    prepare_data([midi_path], perf_config=perf_config)
+    result = prepare_token_data([midi_path], perf_config=perf_config)
+    save_datadict(result)
+    pass
 
 
 def test_mask_perf():
@@ -254,9 +263,9 @@ def test_random_token_walk():
 
 
 def main():
-    # test_prepare_data()
+    test_prepare_token_data()
     # test_mask_perf()
-    test_random_token_walk()
+    # test_random_token_walk()
 
 
 if __name__ == '__main__':
