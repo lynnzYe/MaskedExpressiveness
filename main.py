@@ -1,4 +1,4 @@
-from maskexp.model.train import run_mlm_train
+from maskexp.model.train import continue_velocitymlm
 
 if __name__ == '__main__':
-    run_mlm_train(model_name='velocitymlm', save_dir='save')
+    continue_velocitymlm()

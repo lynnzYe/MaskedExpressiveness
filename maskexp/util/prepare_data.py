@@ -10,6 +10,7 @@ from maskexp.util.tokenize_midi import extract_tokens_from_midi, onehot, decode_
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.definitions import DATA_DIR
 from pathlib import Path
+from maskexp.definitions import IGNORE_LABEL_INDEX
 
 PERF_PAD = 0
 
@@ -179,7 +180,7 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
                           for val in token_ids.tolist()]
     prob_matrix.masked_fill_(torch.tensor(special_token_mask, dtype=torch.bool), value=0.0)
     masked_indices = torch.bernoulli(prob_matrix).bool()
-    labels[~masked_indices] = -100
+    labels[~masked_indices] = IGNORE_LABEL_INDEX
 
     # TODO: Implement mechanism for timeshift
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices

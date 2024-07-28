@@ -1,11 +1,12 @@
-import math
 from tqdm import tqdm
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset, RandomSampler
 from transformers import BertTokenizerFast
 from datasets import load_dataset
+from maskexp.definitions import IGNORE_LABEL_INDEX
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import time
 import os
@@ -278,7 +279,7 @@ class NanoBertMLM(nn.Module):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=IGNORE_LABEL_INDEX)
             loss = loss_fct(prediction_scores.view(-1, self.cls[-1].out_features), labels.view(-1))
 
         return loss, prediction_scores
