@@ -242,7 +242,7 @@ def extract_performances(
     elif sequences_lib.is_absolute_quantized_sequence(quantized_sequence):
       performance = Performance(quantized_sequence, start_step=start_step,
                                 num_velocity_bins=num_velocity_bins,
-                                instrument=instrument)
+                                instrument=instrument)  # Add the max time shift here
     else:
       performance = MetricPerformance(quantized_sequence, start_step=start_step,
                                       num_velocity_bins=num_velocity_bins,

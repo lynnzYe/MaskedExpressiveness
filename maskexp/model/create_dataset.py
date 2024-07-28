@@ -109,7 +109,7 @@ def load_dataset(pt_path, batch_size=32):
     return train_dataloader, val_dataloader, test_dataloader
 
 
-def generate_maestro_dataset(base_path, basic_config=None):
+def generate_maestro_dataset(base_path, basic_config=None, save_name='mstro_with_dyn'):
     if basic_config is None:
         basic_config = {
             'min_seq_len': 64,
@@ -129,7 +129,7 @@ def generate_maestro_dataset(base_path, basic_config=None):
                                    max_seq_len=basic_config['max_seq_len'])
     data_dict['config'] = 'performance_with_dynamics'
     data_dict = data_dict | basic_config
-    save_datadict(data_dict, save_name='mstro_with_dyn')
+    save_datadict(data_dict, save_name=save_name)
 
 
 if __name__ == '__main__':

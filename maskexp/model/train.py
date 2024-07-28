@@ -1,3 +1,5 @@
+import pickle
+
 from maskexp.model.create_dataset import load_dataset
 from maskexp.definitions import DATA_DIR, OUTPUT_DIR
 from pathlib import Path
@@ -50,7 +52,8 @@ def print_perf_seq(perf_seq):
 
 
 def train_mlm(model, config, optimizer, n_epochs, train_dataloader, val_dataloader,
-              mlm_prob=0.15, name='bert', device=torch.device('mps'), eval_epoch=5):
+              mlm_prob=0.15, name='bert', device=torch.device('mps'), eval_epoch=5,
+              save_output_dir=''):
     train_loss, val_loss = [], []
     tokenizer = config.encoder_decoder
     for epoch in range(n_epochs):
@@ -116,7 +119,9 @@ def train_mlm(model, config, optimizer, n_epochs, train_dataloader, val_dataload
                 val_loss.append(avg_val_loss)
 
                 # if epoch % 5 == 0 or epoch == n_epochs - 1:
-                save_checkpoint(model, optimizer, 0, train_loss, val_loss, save_dir='checkpoints', name=name)
+                save_checkpoint(model, optimizer, 0, train_loss, val_loss,
+                                save_dir=f'{save_output_dir}/checkpoints',
+                                name=name)
 
     return train_loss, val_loss
 
@@ -125,9 +130,20 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def run_mlm_train(model_name='velocitymlm', device=torch.device('mps')):
-    train, val, test = load_dataset(DATA_DIR + '/mstro_with_dyn.pt')
+def run_mlm_train(model_name='velocitymlm', device=torch.device('mps'),
+                  save_dir='', data_dir=DATA_DIR + '/mstro_with_dyn.pt'):
+    settings = {'model_name': model_name, 'save_dir': save_dir, 'device': device, 'data_dir': data_dir,
+                'perf_config': 'performance_with_dynamics',
+                'n_embed': 256,
+                'max_seq_len': MAX_SEQ_LEN,
+                'n_layers': 4,
+                'n_heads': 4,
+                'dropout': 0.1,
+                'mlm_prob': 0.15, }
     config = performance_model.default_configs['performance_with_dynamics']
+
+    train, val, test = load_dataset(data_dir)
+    config = config
 
     model = NanoBertMLM(vocab_size=config.encoder_decoder.num_classes,
                         n_embed=256,
@@ -140,14 +156,18 @@ def run_mlm_train(model_name='velocitymlm', device=torch.device('mps')):
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
     train_loss, val_loss = train_mlm(model, config, optimizer, 20, train, val,
-                                     mlm_prob=0.15, name=model_name, device=device)
+                                     mlm_prob=0.15, name=model_name, device=device, save_output_dir=save_dir)
+
     plt.plot(range(len(train_loss)), train_loss, label='Train Loss')
     plt.plot(range(len(val_loss)), val_loss, label='Val Loss')
     plt.title('Training Losses')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig(os.path.join('logs', 'bertmlm-ans_losses.png'))
+    path = Path(f'{save_dir}/logs')
+    if not path.exists():
+        path.mkdir(parents=True)
+    plt.savefig(os.path.join(save_dir, 'logs', 'bertmlm-ans_losses.png'))
 
 
 if __name__ == '__main__':

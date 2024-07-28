@@ -148,6 +148,8 @@ def example():
 def main():
     example()
     # test_onehot()
+    test_extract_tokens_from_midi(
+        '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid')
 
     pass
 
