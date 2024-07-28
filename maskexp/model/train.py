@@ -17,7 +17,7 @@ from maskexp.magenta.models.performance_rnn import performance_model
 NDEBUG = True
 
 
-def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, save_dir='checkpoint', name='checkpoint'):
+def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, cfg=None, save_dir='checkpoint', name='checkpoint'):
     path = Path(save_dir)
     if not path.exists():
         path.mkdir(parents=True, exist_ok=False)
@@ -28,6 +28,11 @@ def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, save_dir='che
         'train_loss': train_loss,
         'val_loss': val_loss
     }
+    if cfg is None:
+        print("\x1B[33m[Warning]\033[0m model setting is not provided...recording only the state dict and losses")
+    else:
+        checkpoint = checkpoint | cfg.__dict__
+
     torch.save(checkpoint, f'{save_dir}/{name}.pth')
     print(f"\x1B[34m[Info]\033[0m Checkpoint saved to {save_dir}/{name}.pth")
 
@@ -103,7 +108,8 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                 # if epoch % 5 == 0 or epoch == n_epochs - 1:
                 save_checkpoint(model, optimizer, 0, train_loss, val_loss,
                                 save_dir=f'{cfg.save_dir}/checkpoints',
-                                name=cfg.model_name)
+                                name=cfg.model_name,
+                                cfg=cfg)
 
     return train_loss, val_loss
 
