@@ -52,7 +52,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
 
             # Mask tokens
             inputs, labels = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                              special_ids=(note_seq.PerformanceEvent.VELOCITY,))
+                                              special_ids=cfg.special_tokens)
             inputs = inputs.to(cfg.device)
             attention_mask = attention_mask.to(cfg.device)
             labels = labels.to(cfg.device)
@@ -80,7 +80,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
 
                     # Mask tokens
                     inputs, labels = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                      special_ids=(note_seq.PerformanceEvent.VELOCITY,))
+                                                      special_ids=cfg.special_tokens)
 
                     inputs = inputs.to(cfg.device)
                     attention_mask = attention_mask.to(cfg.device)

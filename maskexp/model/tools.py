@@ -5,7 +5,7 @@ import functools
 import os
 import note_seq
 from inspect import signature
-from maskexp.definitions import IGNORE_LABEL_INDEX
+from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT
 from pathlib import Path
 from maskexp.magenta.models.performance_rnn import performance_model
 
@@ -54,7 +54,10 @@ def decode_perf_logits(logits, decoder=None):
 def print_perf_seq(perf_seq):
     outstr = ''
     for e in perf_seq:
-        outstr += f'[{e.event_type}-{e.event_value}], '
+        if e.event_value == DEFAULT_MASK_EVENT.event_value and e.event_type == DEFAULT_MASK_EVENT.event_type:
+            outstr += f'\x1B[34m[{e.event_type}-{e.event_value}],\033[0m\t'
+        else:
+            outstr += f'[{e.event_type}-{e.event_value}],\t'
     print(outstr)
 
 
@@ -122,7 +125,7 @@ class ExpConfig:
         if perf_config_name not in performance_model.default_configs.keys():
             raise KeyError(f"Performance config key: {perf_config_name} not found")
         if special_tokens is None:
-            raise ValueError("Special token(s) is required for MLM training")
+            print("\x1B[33m[Warning]\033[0m Special token(s) is required for MLM training")
 
         # IO Paths
         self.model_name = model_name  # Will be used to name the saved file

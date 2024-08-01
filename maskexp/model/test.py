@@ -5,6 +5,7 @@ from maskexp.magenta.pipelines.performance_pipeline import get_full_token_pipeli
 from maskexp.util.tokenize_midi import extract_complete_tokens
 from tools import ExpConfig, load_model, load_model_from_pth, print_perf_seq, decode_batch_perf_logits, hits_at_k, \
     accuracy_within_n, bind_metric, decode_perf_logits
+from maskexp.util.play_midi import syn_perfevent
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.model.bert import NanoBertMLM
 from pathlib import Path
@@ -18,7 +19,7 @@ import os
 import tqdm
 import time
 
-NDEBUG = True
+NDEBUG = False
 
 
 def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.device('mps')):
@@ -35,6 +36,9 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
             input_ids = batch[0]
             attention_mask = batch[1]
 
+            decoded = [tokenizer.class_index_to_event(i, None) for i in input_ids[0, :].tolist()]
+            print("intpus:")
+            print_perf_seq(decoded)
             # Mask tokens
             inputs, labels = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=0.15,
                                               special_ids=(note_seq.PerformanceEvent.VELOCITY,))
@@ -51,9 +55,11 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
                 if not math.isnan(metric_value):
                     test_metrics[metric.__name__].append(metric_value)
 
-            if step == len(test_dataloader) - 1:
+            if step == len(test_dataloader) - 1 or not NDEBUG:
                 decoded = [tokenizer.class_index_to_event(i, None) for i in inputs[0, :].tolist()]
+                print("Input ids:")
                 print_perf_seq(decoded)
+                print("Decoded:")
                 print_perf_seq(decode_batch_perf_logits(logits, tokenizer._one_hot_encoding, idx=0))
 
             if not NDEBUG:
@@ -104,21 +110,9 @@ def run_mlm_test(test_settings: ExpConfig = None):
     return
 
 
-def test_velocitymlm():
-    st = ExpConfig(model_name='velocitymlm',
-                   save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
-                   data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
-                   device=torch.device('mps'),
-                   perf_config_name='performance_with_dynamics',
-                   n_embed=256,
-                   max_seq_len=128,
-                   n_layers=4,
-                   n_heads=4,
-                   dropout=0.1,
-                   mlm_prob=0.15,
-                   n_epochs=20
-                   )
-    run_mlm_test(test_settings=st)
+def test_velocitymlm(ckpt_path):
+    cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
+    run_mlm_test(test_settings=cfg)
 
 
 def pad_seq(tokens, pad_id=0, seq_len=256):
@@ -211,30 +205,43 @@ def run_mlm_pred(pth, inputs, masks):
     return mlm_pred(model, perf_config, inputs, masks, device=pth['device'])
 
 
-def render_seq(midi_path, save_path=None):
+def mask_all_velocity_ids(token_ids, perf_config):
+    mask_id = perf_config.encoder_decoder._one_hot_encoding.encode_event(DEFAULT_MASK_EVENT)
+    for i, e in enumerate(token_ids):
+        event = perf_config.encoder_decoder._one_hot_encoding.decode_event(e)
+        if event.event_type == note_seq.PerformanceEvent.VELOCITY:
+            token_ids[i] = mask_id
+
+
+def render_seq(midi_path, ckpt_path=None, mask_all_velocity=False):
     """
     Predict velocity for masked midi events
         -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
         -> generation by the simplest strategy -> shift by max-seq-len, no window overlap
     :param midi_path:
-    :param save_path: path to the checkpoint (which should also contain the model settings, losses etc.)
+    :param ckpt_path: path to the checkpoint (which should also contain the model settings, losses etc.)
     :return:
     """
-    if save_path is None:
+    if ckpt_path is None:
         raise ValueError("Config path must be provided")
-    pth = torch.load(save_path)
+    pth = torch.load(ckpt_path)
     cfg = ExpConfig.load_from_dict(pth)
     perf_config = performance_model.default_configs[cfg.perf_config_name]
     tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
+
     inputs, masks = prepare_model_input(tokens, perf_config, seq_len=pth['max_seq_len'])
-    mask_velocity_demo_tokens(inputs, perf_config=perf_config)
+    if mask_all_velocity:
+        for ids in inputs:
+            mask_all_velocity_ids(ids, perf_config)
 
     # Model Prediction
     out = run_mlm_pred(pth, inputs, masks)
+    syn_perfevent(out, filename='demo1.wav', n_velocity_bin=perf_config.num_velocity_bins)
     pass
 
 
 if __name__ == '__main__':
-    # test_velocitymlm()
-    render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
-               save_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm+++.pth')
+    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm++++++.pth')
+    # render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+    #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm+++.pth',
+    #            mask_all_velocity=True)

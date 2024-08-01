@@ -4,7 +4,7 @@ import note_seq
 from note_seq import PerformanceEvent
 import numpy as np
 from scipy.io.wavfile import write as write_wav
-from maskexp.definitions import OUTPUT_DIR
+from maskexp.definitions import OUTPUT_DIR, ROOT_DIR
 from note_seq.testing_lib import add_track_to_sequence
 
 
@@ -53,7 +53,7 @@ def syn_perfevent(perf: list[PerformanceEvent], filename='rendered.wav', n_veloc
 
 
 def syn_prettymidi(midi: pretty_midi.PrettyMIDI, output_dir=OUTPUT_DIR, filename='rendered.wav'):
-    audio_data = midi.fluidsynth(sf2_path='../../data/soundfount/grandmistral.sf2')
+    audio_data = midi.fluidsynth(sf2_path=ROOT_DIR + '/data/soundfount/grandmistral.sf2')
     audio_data = audio_data / np.max(np.abs(audio_data))
     write_wav(output_dir + '/' + filename, 44100, audio_data)
     return audio_data

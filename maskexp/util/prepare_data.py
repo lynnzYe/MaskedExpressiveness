@@ -107,7 +107,7 @@ def prepare_one_midi_data(midi_path, perf_config=None, min_seq_len=64, max_seq_l
     return torch.tensor(out_tokens), torch.tensor(attention_masks)
 
 
-def get_special_token_mask(tokens: list, decoder: note_seq.encoder_decoder.OneHotEncoding, special_class_ids=None):
+def only_mask_special_token(tokens: list, decoder: note_seq.encoder_decoder.OneHotEncoding, special_class_ids=None):
     """
     Determine if a token is special token
     :param tokens:
@@ -119,7 +119,7 @@ def get_special_token_mask(tokens: list, decoder: note_seq.encoder_decoder.OneHo
         special_class_ids = (note_seq.PerformanceEvent.TIME_SHIFT,
                              note_seq.PerformanceEvent.VELOCITY,
                              note_seq.PerformanceEvent.DURATION)
-    return [int(decoder.decode_event(e).event_type in special_class_ids) for e in tokens]
+    return [int(decoder.decode_event(e).event_type not in special_class_ids) for e in tokens]
 
 
 def find_event_range(decoder, class_idx):
@@ -174,7 +174,7 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
 
     # Obtain special tokens
     tokenizer = perf_config.encoder_decoder._one_hot_encoding
-    special_token_mask = [get_special_token_mask(val, tokenizer, special_class_ids=special_ids)
+    special_token_mask = [only_mask_special_token(val, tokenizer, special_class_ids=special_ids)
                           for val in token_ids.tolist()]
     prob_matrix.masked_fill_(torch.tensor(special_token_mask, dtype=torch.bool), value=0.0)
     masked_indices = torch.bernoulli(prob_matrix).bool()
