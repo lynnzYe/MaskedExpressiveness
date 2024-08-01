@@ -1,13 +1,16 @@
 from maskexp.model.create_dataset import load_dataset
-from maskexp.definitions import DATA_DIR
-from maskexp.util.prepare_data import mask_perf_tokens
-from tools import ExpConfig, load_ckpt, print_perf_seq, decode_perf_logits, hits_at_k, \
-    accuracy_within_n, bind_metric
+from maskexp.definitions import DATA_DIR, DEFAULT_MASK_EVENT
+from maskexp.util.prepare_data import mask_perf_tokens, get_attention_mask
+from maskexp.magenta.pipelines.performance_pipeline import get_full_token_pipeline
+from maskexp.util.tokenize_midi import extract_complete_tokens
+from tools import ExpConfig, load_model, load_model_from_pth, print_perf_seq, decode_batch_perf_logits, hits_at_k, \
+    accuracy_within_n, bind_metric, decode_perf_logits
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.model.bert import NanoBertMLM
 from pathlib import Path
 import torch
 import functools
+import numpy as np
 import math
 import matplotlib.pyplot as plt
 import note_seq
@@ -51,7 +54,7 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
             if step == len(test_dataloader) - 1:
                 decoded = [tokenizer.class_index_to_event(i, None) for i in inputs[0, :].tolist()]
                 print_perf_seq(decoded)
-                print_perf_seq(decode_perf_logits(logits, tokenizer._one_hot_encoding))
+                print_perf_seq(decode_batch_perf_logits(logits, tokenizer._one_hot_encoding, idx=0))
 
             if not NDEBUG:
                 break
@@ -82,7 +85,7 @@ def run_mlm_test(test_settings: ExpConfig = None):
                         n_heads=test_settings.n_heads,
                         dropout=test_settings.dropout)
     model.to(test_settings.device)
-    load_ckpt(model, None, f'{test_settings.save_dir}/checkpoints/{test_settings.model_name}.pth')
+    load_model(model, None, f'{test_settings.save_dir}/checkpoints/{test_settings.model_name}.pth')
 
     hits_1, hits_3, hits_5 = (bind_metric(hits_at_k, k=1),
                               bind_metric(hits_at_k, k=3),
@@ -118,5 +121,120 @@ def test_velocitymlm():
     run_mlm_test(test_settings=st)
 
 
+def pad_seq(tokens, pad_id=0, seq_len=256):
+    return torch.tensor(np.pad(tokens, (0, seq_len - len(tokens)), mode='constant', constant_values=pad_id))
+
+
+def prepare_model_input(list_of_encodings, perf_config=None, seq_len=256):
+    """
+    convert a list of one_hot encodings to array of appropriately-sized sequences for model prediction
+    :param list_of_encodings:
+    :param perf_config:
+    :return:
+    """
+    if perf_config is None:
+        raise ValueError("need config")
+    chunks = [torch.tensor(list_of_encodings[i:i + seq_len]) for i in range(0, len(list_of_encodings), seq_len)]
+    masks = [torch.tensor(get_attention_mask(ck, max_seq_len=seq_len)) for ck in chunks]
+    pad_token = perf_config.encoder_decoder.default_event_label
+    if len(chunks[-1]) < seq_len:
+        chunks[-1] = pad_seq(chunks[-1], pad_id=pad_token, seq_len=seq_len)
+
+    return chunks, masks
+
+
+def get_demo_token_mask(token_ids, one_hot_encoding,
+                        special_token=note_seq.PerformanceEvent(event_type=4, event_value=1)):
+    """
+    Mask velocity=1 events for demo evaluation
+    :param token_ids:
+    :param one_hot_encoding:
+    :param special_token:
+    :return:
+    """
+    out = []
+    for i in token_ids:
+        event = one_hot_encoding.decode_event(i)
+        if event.event_type == special_token.event_type and event.event_value == special_token.event_value:
+            out.append(True)  # Replace with MASK TOKEN
+        else:
+            out.append(False)
+    return out
+
+
+def mask_velocity_demo_tokens(token_seq_list, perf_config=None):
+    """
+    Replace velocity=1 events with MSK event (which is defined in prepare_data mask_perf_token
+    :param token_seq_list:
+    :param perf_config
+    :return:
+    """
+    if perf_config is None:
+        raise ValueError("Config is required to use the tokenizer!")
+
+    # Obtain special tokens
+    tokenizer = perf_config.encoder_decoder._one_hot_encoding
+    for seq in token_seq_list:
+        mask = torch.tensor(get_demo_token_mask(seq, tokenizer))
+        seq[mask] = tokenizer.encode_event(DEFAULT_MASK_EVENT)
+
+
+def mlm_pred(model, perf_config, input_list, mask_list, device=torch.device('mps')):
+    assert len(input_list) == len(mask_list) and len(input_list) > 0
+    assert len(input_list[0]) == len(mask_list[0])
+    assert isinstance(input_list[0], torch.Tensor)
+    assert isinstance(mask_list[0], torch.Tensor)
+
+    tokenizer = perf_config.encoder_decoder
+    model.eval()
+
+    out = []
+    with torch.no_grad():
+        for i in tqdm.tqdm(range(0, len(input_list))):
+            inputs = input_list[i].unsqueeze(0).to(device)
+            attention_mask = mask_list[i].unsqueeze(0).to(device)
+            _, logits = model(inputs, attention_mask=attention_mask, labels=None)
+            out.extend(decode_perf_logits(logits, tokenizer._one_hot_encoding))
+    return out
+
+
+def run_mlm_pred(pth, inputs, masks):
+    perf_config = performance_model.default_configs[pth['perf_config_name']]
+    model = NanoBertMLM(vocab_size=perf_config.encoder_decoder.num_classes,
+                        n_embed=pth['n_embed'],
+                        max_seq_len=pth['max_seq_len'],
+                        n_layers=pth['n_layers'],
+                        n_heads=pth['n_heads'],
+                        dropout=pth['dropout'])
+    model.to(pth['device'])
+    load_model_from_pth(model, optimizer=None, pth=pth)
+    return mlm_pred(model, perf_config, inputs, masks, device=pth['device'])
+
+
+def render_seq(midi_path, save_path=None):
+    """
+    Predict velocity for masked midi events
+        -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
+        -> generation by the simplest strategy -> shift by max-seq-len, no window overlap
+    :param midi_path:
+    :param save_path: path to the checkpoint (which should also contain the model settings, losses etc.)
+    :return:
+    """
+    if save_path is None:
+        raise ValueError("Config path must be provided")
+    pth = torch.load(save_path)
+    cfg = ExpConfig.load_from_dict(pth)
+    perf_config = performance_model.default_configs[cfg.perf_config_name]
+    tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
+    inputs, masks = prepare_model_input(tokens, perf_config, seq_len=pth['max_seq_len'])
+    mask_velocity_demo_tokens(inputs, perf_config=perf_config)
+
+    # Model Prediction
+    out = run_mlm_pred(pth, inputs, masks)
+    pass
+
+
 if __name__ == '__main__':
-    test_velocitymlm()
+    # test_velocitymlm()
+    render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+               save_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm+++.pth')

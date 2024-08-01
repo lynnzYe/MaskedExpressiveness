@@ -1,18 +1,16 @@
-import pickle
-
 from maskexp.model.create_dataset import load_dataset
 from maskexp.definitions import DATA_DIR, OUTPUT_DIR
 from pathlib import Path
 from maskexp.util.prepare_data import mask_perf_tokens
-from maskexp.model.tools import print_perf_seq, decode_perf_logits, MAX_SEQ_LEN, ExpConfig, load_ckpt
-import time
+from maskexp.model.tools import print_perf_seq, decode_batch_perf_logits, MAX_SEQ_LEN, ExpConfig, load_model
+from maskexp.model.bert import NanoBertMLM
+from maskexp.magenta.models.performance_rnn import performance_model
 import os
+import pickle
 import torch
 import tqdm
 import note_seq
 import matplotlib.pyplot as plt
-from maskexp.model.bert import NanoBertMLM
-from maskexp.magenta.models.performance_rnn import performance_model
 
 NDEBUG = True
 
@@ -44,7 +42,6 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
     perf_config = performance_model.default_configs[cfg.perf_config_name]
     tokenizer = perf_config.encoder_decoder
     for epoch in range(cfg.n_epochs):
-        train_start = time.time()
         model.train()
         total_loss = 0
 
@@ -68,9 +65,8 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                 break
 
         avg_train_loss = total_loss / len(train_dataloader)
-        train_end = time.time()
         print(
-            f'Epoch {epoch + 1}/{cfg.n_epochs}, Training Loss: {avg_train_loss}, Training Time: {train_end - train_start}')
+            f'Epoch {epoch + 1}/{cfg.n_epochs}, Training Loss: {avg_train_loss}')
         train_loss.append(avg_train_loss)
 
         erange = epoch + 1 if NDEBUG else epoch
@@ -96,7 +92,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                     if i_b == len(val_dataloader) - 1:
                         decoded = [tokenizer.class_index_to_event(i, None) for i in inputs[0, :].tolist()]
                         print_perf_seq(decoded)
-                        print_perf_seq(decode_perf_logits(logits, tokenizer._one_hot_encoding))
+                        print_perf_seq(decode_batch_perf_logits(logits, tokenizer._one_hot_encoding, idx=0))
 
                     if not NDEBUG:
                         break
@@ -157,7 +153,7 @@ def run_mlm_train(cfg: ExpConfig = None):
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     if cfg.resume_from is not None:
         print(f'\x1B[34m[Info]\033[0m Loading model from checkpoint: {cfg.resume_from}')
-        load_ckpt(model, optimizer, cpath=cfg.resume_from)
+        load_model(model, optimizer, cpath=cfg.resume_from)
 
     train_loss, val_loss = train_mlm(model, optimizer, train, val, cfg=cfg)
     generate_loss_plot(train_loss, val_loss, cfg.eval_intv, save_dir=cfg.save_dir, name=cfg.model_name)
@@ -175,11 +171,11 @@ def train_velocitymlm():
 
 
 def continue_velocitymlm():
-    cfg = ExpConfig(model_name='velocitymlm+', save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
+    cfg = ExpConfig(model_name='velocitymlm++++++', save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
                     data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
-                    resume_from='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
+                    resume_from='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm+++++.pth',
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
                     device=torch.device('mps'), mlm_prob=0.15, n_epochs=20,
                     )

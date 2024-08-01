@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import functools
 import os
 import note_seq
+from inspect import signature
 from maskexp.definitions import IGNORE_LABEL_INDEX
 from pathlib import Path
 from maskexp.magenta.models.performance_rnn import performance_model
@@ -11,22 +12,41 @@ from maskexp.magenta.models.performance_rnn import performance_model
 MAX_SEQ_LEN = 128
 
 
-def load_ckpt(model, optimizer=None, cpath=''):
+def load_model(model, optimizer=None, cpath=''):
     ckpt_path = Path(cpath)
     if not ckpt_path.exists():
         raise FileNotFoundError(f'Checkpoint file not found: {ckpt_path}')
     ckpt = torch.load(ckpt_path)
-    model.load_state_dict(ckpt['model_state_dict'])
+    load_model_from_pth(model, optimizer, ckpt)
+
+
+def load_model_from_pth(model, optimizer=None, pth=None):
+    if pth is None:
+        raise ValueError(".pth file must be provided")
+    model.load_state_dict(pth['model_state_dict'])
     if optimizer is not None:
-        optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+        optimizer.load_state_dict(pth['optimizer_state_dict'])
 
 
-def decode_perf_logits(logits, decoder=None, idx=0):
+def decode_batch_perf_logits(logits, decoder=None, idx=None):
     if decoder is None:
         raise ValueError("Decoder is required")
-    pred_ids = torch.argmax(F.softmax(logits, dim=-1), dim=-1)[0, :].tolist()
+    if idx is None:
+        pred_ids = torch.argmax(F.softmax(logits, dim=-1), dim=-1).tolist()
+    else:
+        pred_ids = torch.argmax(F.softmax(logits, dim=-1), dim=-1)[idx, :].tolist()
     out = []
     for tk in pred_ids:
+        out.append(decoder.decode_event(tk))
+    return out
+
+
+def decode_perf_logits(logits, decoder=None):
+    if decoder is None:
+        raise ValueError("Decoder is required")
+    pred_ids = torch.argmax(F.softmax(logits, dim=-1), dim=-1).tolist()
+    out = []
+    for tk in pred_ids[0]:
         out.append(decoder.decode_event(tk))
     return out
 
@@ -95,7 +115,6 @@ class ExpConfig:
     def __init__(self, model_name='', save_dir='', data_path='', perf_config_name='',
                  n_embed=256, n_layers=4, n_heads=4, dropout=0.1, max_seq_len=MAX_SEQ_LEN, special_tokens=None,
                  device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, eval_interval=5, resume_from=None):
-
         assert os.path.exists(save_dir) and os.path.exists(data_path)
         ckpt_save_path = os.path.join(save_dir, model_name, '.pth')
         if os.path.exists(ckpt_save_path):
@@ -126,3 +145,30 @@ class ExpConfig:
         self.special_tokens = special_tokens
 
         self.resume_from = resume_from  # Provide checkpoint path to resume
+
+    @classmethod
+    def load_from_dict(cls, json_cfg):
+        init_params = signature(cls.__init__).parameters
+        filtered_cfg = {key: value for key, value in json_cfg.items() if key in init_params}
+        return cls(**filtered_cfg)
+        # # IO Paths
+        # self.model_name = json_cfg['model_name']  # Will be used to name the saved file
+        # self.save_dir = json_cfg['save_dir']  # two folders will be created - checkpoints, logs
+        # self.data_path = json_cfg['data_path']
+        # self.perf_config_name = json_cfg['perf_config_name']
+        #
+        # # Model Setting
+        # self.n_embed = json_cfg['n_embed']
+        # self.max_seq_len = json_cfg['max_seq_len']
+        # self.n_layers = json_cfg['n_layers']
+        # self.n_heads = json_cfg['n_heads']
+        # self.dropout = json_cfg['dropout']
+        #
+        # # Training Setting
+        # self.mlm_prob = json_cfg['mlm_prob']
+        # self.device = json_cfg['device']
+        # self.n_epochs = json_cfg['n_epochs']
+        # self.eval_intv = json_cfg['eval_interval']
+        # self.special_tokens = json_cfg['special_tokens']
+        #
+        # self.resume_from = json_cfg['resume_from']  # Provide checkpoint path to resume

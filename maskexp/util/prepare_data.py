@@ -10,12 +10,10 @@ from maskexp.util.tokenize_midi import extract_tokens_from_midi, onehot, decode_
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.definitions import DATA_DIR
 from pathlib import Path
-from maskexp.definitions import IGNORE_LABEL_INDEX
-
-PERF_PAD = 0
+from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT
 
 
-def get_attention_mask(tokens, max_seq_len=128):
+def get_attention_mask(tokens, max_seq_len):
     """
     Return array of ones and zeros (masks)
     :param tokens:
@@ -41,9 +39,9 @@ def convert_onehot_to_ids(onehot):
     return np.argmax(onehot)
 
 
-def process_perf_tokenseq(token_seq, perf_config, max_seq_len=128):
+def pad_onehot_perf_tokens(token_seq, perf_config, max_seq_len=128):
     """
-    Return lists of labels padded to max_seq_len
+    Return lists of "labels" padded to max_seq_len
     Make a copy of the ids, and pad token seq to max seq len
     :param token_seq: dict -> { 'inputs': [onehot encodings], 'labels': [list of class idx] }
     :param perf_config:
@@ -105,7 +103,7 @@ def prepare_one_midi_data(midi_path, perf_config=None, min_seq_len=64, max_seq_l
     out_tokens = []
     for token_dict in tokens:
         attention_masks.append(get_attention_mask(token_dict['inputs'], max_seq_len=max_seq_len))
-        out_tokens.append(process_perf_tokenseq(token_dict['inputs'], perf_config, max_seq_len=max_seq_len))
+        out_tokens.append(pad_onehot_perf_tokens(token_dict['inputs'], perf_config, max_seq_len=max_seq_len))
     return torch.tensor(out_tokens), torch.tensor(attention_masks)
 
 
@@ -185,7 +183,7 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
     # TODO: Implement mechanism for timeshift
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
     # default mask token is an unused midi
-    token_ids[indices_replaced] = tokenizer.encode_event(note_seq.PerformanceEvent(event_type=1, event_value=1))
+    token_ids[indices_replaced] = tokenizer.encode_event(DEFAULT_MASK_EVENT)
 
     # Random work 10%
     indices_random = torch.bernoulli(torch.full(labels.shape, 0.1)).bool() & masked_indices & ~indices_replaced

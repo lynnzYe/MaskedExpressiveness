@@ -63,10 +63,26 @@ def cleanup_perf_dict(perf_dict):
     """
     Because magenta make 128 into [0~127, 1~128] for input/label pairs
     We manually add the last token to inputs for Bert MLM training
+
+    [WARNING] removes key: labels in place
+
     :param perf_dict:
     :return:
     """
     perf_dict['inputs'].append(onehot(perf_dict['labels'][-1], len(perf_dict['inputs'][0])))
+    if 'labels' in perf_dict:
+        del perf_dict['labels']  # We don't use the labels
+
+
+def get_labels_from_dict(perf_dict):
+    """
+    Extract labels (indices instead of one-hot)
+    :param perf_dict:
+    :return:
+    """
+    labels = [np.argmax(perf_dict['inputs'][0])]
+    labels.extend(perf_dict['labels'])
+    return labels
 
 
 def extract_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
@@ -92,6 +108,32 @@ def extract_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
         perf_data = translate_perf_data(e)
         cleanup_perf_dict(perf_data)  # Necessary
         token_list.append(perf_data)
+    return token_list
+
+
+def extract_complete_tokens(filepath, config=None, max_seq=256, min_seq=32):
+    """
+    Extract complete tokens from one midi file
+    :param filepath:
+    :param config:
+    :param max_seq:
+    :param min_seq:
+    :return:
+    """
+    if config is None:
+        raise ValueError("Config must be provided")
+
+    seq = get_noteseq(filepath=filepath)
+    pipeline_inst = performance_pipeline.get_full_token_pipeline(
+        config=config,
+        min_events=min_seq,
+        max_events=max_seq)  # Magenta will reduce input by 1 element and shift label by 1)
+    result = pipeline_inst.transform(seq)
+    assert len(result['training_performances']) == 1
+    token_list = []
+    for e in result['training_performances']:
+        perf_dict = translate_perf_data(e)
+        token_list.extend(get_labels_from_dict(perf_dict))  # Necessary
     return token_list
 
 

@@ -160,6 +160,32 @@ def get_pipeline(config, min_events, max_events, eval_ratio):
     return dag_pipeline.DAGPipeline(dag)
 
 
+def get_full_token_pipeline(config, min_events, max_events):
+    partitioner = pipelines_common.RandomPartition(
+        music_pb2.NoteSequence,
+        ['eval_performances', 'training_performances'],
+        [0])
+    dag = {partitioner: dag_pipeline.DagInput(music_pb2.NoteSequence)}
+
+    for mode in ['eval', 'training']:
+        sustain_pipeline = note_sequence_pipelines.SustainPipeline(
+            name='SustainPipeline_' + mode)
+        quantizer = note_sequence_pipelines.Quantizer(
+            steps_per_second=config.steps_per_second, name='Quantizer_' + mode)
+        perf_extractor = PerformanceExtractor(
+            min_events=min_events, max_events=max_events,
+            num_velocity_bins=config.num_velocity_bins,
+            note_performance=config.note_performance,
+            name='PerformanceExtractor_' + mode)
+        encoder_pipeline = EncoderPipeline(config, name='EncoderPipeline_' + mode)
+        dag[sustain_pipeline] = partitioner[mode + '_performances']
+        dag[quantizer] = sustain_pipeline
+        dag[perf_extractor] = quantizer
+        dag[encoder_pipeline] = perf_extractor
+        dag[dag_pipeline.DagOutput(mode + '_performances')] = encoder_pipeline
+    return dag_pipeline.DAGPipeline(dag)
+
+
 def extract_performances(
         quantized_sequence, start_step=0, min_events_discard=None,
         max_events_truncate=None, max_steps_truncate=None, num_velocity_bins=0,
