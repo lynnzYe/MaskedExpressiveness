@@ -1,7 +1,8 @@
-from maskexp.model.train import continue_velocitymlm
+from maskexp.model.train import train_velocitymlm, continue_velocitymlm
 
 if __name__ == '__main__':
-    continue_velocitymlm()
+    train_velocitymlm()
+    # continue_velocitymlm()
 
 
 

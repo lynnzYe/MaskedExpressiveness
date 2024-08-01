@@ -117,7 +117,8 @@ def bind_metric(func, **kwargs):
 class ExpConfig:
     def __init__(self, model_name='', save_dir='', data_path='', perf_config_name='',
                  n_embed=256, n_layers=4, n_heads=4, dropout=0.1, max_seq_len=MAX_SEQ_LEN, special_tokens=None,
-                 device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, eval_interval=5, resume_from=None):
+                 device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, eval_interval=5, save_interval=5,
+                 resume_from=None, train_loss=None, val_loss=None, epoch=0):
         assert os.path.exists(save_dir) and os.path.exists(data_path)
         ckpt_save_path = os.path.join(save_dir, model_name, '.pth')
         if os.path.exists(ckpt_save_path):
@@ -145,33 +146,17 @@ class ExpConfig:
         self.device = device
         self.n_epochs = n_epochs
         self.eval_intv = eval_interval
+        self.save_intv = save_interval
         self.special_tokens = special_tokens
 
         self.resume_from = resume_from  # Provide checkpoint path to resume
+
+        self.train_loss = [] if train_loss is None else train_loss
+        self.val_loss = [] if val_loss is None else val_loss
+        self.epoch = epoch
 
     @classmethod
     def load_from_dict(cls, json_cfg):
         init_params = signature(cls.__init__).parameters
         filtered_cfg = {key: value for key, value in json_cfg.items() if key in init_params}
         return cls(**filtered_cfg)
-        # # IO Paths
-        # self.model_name = json_cfg['model_name']  # Will be used to name the saved file
-        # self.save_dir = json_cfg['save_dir']  # two folders will be created - checkpoints, logs
-        # self.data_path = json_cfg['data_path']
-        # self.perf_config_name = json_cfg['perf_config_name']
-        #
-        # # Model Setting
-        # self.n_embed = json_cfg['n_embed']
-        # self.max_seq_len = json_cfg['max_seq_len']
-        # self.n_layers = json_cfg['n_layers']
-        # self.n_heads = json_cfg['n_heads']
-        # self.dropout = json_cfg['dropout']
-        #
-        # # Training Setting
-        # self.mlm_prob = json_cfg['mlm_prob']
-        # self.device = json_cfg['device']
-        # self.n_epochs = json_cfg['n_epochs']
-        # self.eval_intv = json_cfg['eval_interval']
-        # self.special_tokens = json_cfg['special_tokens']
-        #
-        # self.resume_from = json_cfg['resume_from']  # Provide checkpoint path to resume

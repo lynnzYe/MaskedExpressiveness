@@ -12,24 +12,31 @@ import tqdm
 import note_seq
 import matplotlib.pyplot as plt
 
-NDEBUG = True
+NDEBUG = False
 
 
 def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, cfg=None, save_dir='checkpoint', name='checkpoint'):
     path = Path(save_dir)
     if not path.exists():
         path.mkdir(parents=True, exist_ok=False)
+
+    all_train_loss = cfg.train_loss.copy()
+    all_train_loss.extend(train_loss)
+
+    all_val_loss = cfg.val_loss.copy()
+    all_val_loss.extend(val_loss)
+
     checkpoint = {
-        'epoch': epoch,
+        'epoch': cfg.epoch + epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
-        'train_loss': train_loss,
-        'val_loss': val_loss
+        'train_loss': all_train_loss,
+        'val_loss': all_val_loss
     }
     if cfg is None:
         print("\x1B[33m[Warning]\033[0m model setting is not provided...recording only the state dict and losses")
     else:
-        checkpoint = checkpoint | cfg.__dict__
+        checkpoint = cfg.__dict__ | checkpoint
 
     torch.save(checkpoint, f'{save_dir}/{name}.pth')
     print(f"\x1B[34m[Info]\033[0m Checkpoint saved to {save_dir}/{name}.pth")
@@ -45,6 +52,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
         model.train()
         total_loss = 0
 
+        train_num = 0
         for step, batch in enumerate(tqdm.tqdm(train_dataloader)):
             optimizer.zero_grad()
             input_ids = batch[0]
@@ -61,10 +69,11 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+            train_num += 1
             if not NDEBUG:
                 break
 
-        avg_train_loss = total_loss / len(train_dataloader)
+        avg_train_loss = total_loss / train_num
         print(
             f'Epoch {epoch + 1}/{cfg.n_epochs}, Training Loss: {avg_train_loss}')
         train_loss.append(avg_train_loss)
@@ -73,6 +82,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
         if erange % cfg.eval_intv == 0:
             model.eval()
             total_val_loss = 0
+            val_num = 0
             with torch.no_grad():
                 for i_b, batch in enumerate(val_dataloader):
                     input_ids = batch[0]
@@ -88,26 +98,32 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
 
                     loss, logits = model(inputs, attention_mask=attention_mask, labels=labels)
                     total_val_loss += loss.item()
+                    val_num += 1
 
-                    if i_b == len(val_dataloader) - 1:
+                    if i_b == len(val_dataloader) - 1 or not NDEBUG:
                         decoded = [tokenizer.class_index_to_event(i, None) for i in inputs[0, :].tolist()]
+                        print("Input:")
                         print_perf_seq(decoded)
+                        print("Pred:")
                         print_perf_seq(decode_batch_perf_logits(logits, tokenizer._one_hot_encoding, idx=0))
 
                     if not NDEBUG:
                         break
 
-                avg_val_loss = total_val_loss / len(val_dataloader)
+                avg_val_loss = total_val_loss / val_num
                 print(f'Epoch {epoch + 1}/{cfg.n_epochs}, Validation Loss: {avg_val_loss}')
                 val_loss.append(avg_val_loss)
 
-                # if epoch % 5 == 0 or epoch == n_epochs - 1:
-                save_checkpoint(model, optimizer, 0, train_loss, val_loss,
-                                save_dir=f'{cfg.save_dir}/checkpoints',
-                                name=cfg.model_name,
-                                cfg=cfg)
-
-    return train_loss, val_loss
+        if (epoch + 1) % cfg.save_intv == 0 or epoch == cfg.n_epochs - 1:
+            save_checkpoint(model, optimizer, epoch, train_loss, val_loss,
+                            save_dir=f'{cfg.save_dir}/checkpoints',
+                            name=cfg.model_name,
+                            cfg=cfg)
+    cont_train_loss = cfg.train_loss.copy()
+    cont_val_loss = cfg.val_loss.copy()
+    cont_train_loss.extend(train_loss)
+    cont_val_loss.extend(val_loss)
+    return cont_train_loss, cont_val_loss
 
 
 def count_parameters(model):
@@ -165,23 +181,19 @@ def train_velocitymlm():
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
-                    device=torch.device('mps'), mlm_prob=0.15, n_epochs=20,
+                    device=torch.device('mps'), mlm_prob=0.4, n_epochs=20,
                     )
     run_mlm_train(cfg)
 
 
 def continue_velocitymlm():
-    cfg = ExpConfig(model_name='velocitymlm++++++', save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
-                    data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
-                    perf_config_name='performance_with_dynamics',
-                    special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
-                    resume_from='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm+++++.pth',
-                    n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
-                    device=torch.device('mps'), mlm_prob=0.15, n_epochs=20,
-                    )
+    ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth'
+    cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
+    cfg.resume_from = ckpt_path
     run_mlm_train(cfg)
 
 
 if __name__ == '__main__':
+    train_velocitymlm()
     continue_velocitymlm()
     pass
