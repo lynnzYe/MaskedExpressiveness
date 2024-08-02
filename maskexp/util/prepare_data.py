@@ -10,7 +10,11 @@ from maskexp.util.tokenize_midi import extract_tokens_from_midi, onehot, decode_
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.definitions import DATA_DIR
 from pathlib import Path
-from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT
+from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT, VELOCITY_MASK_EVENT
+
+IGNORE_LABEL = 0
+SPECIAL_MASK_LABEL = 1
+NORMAL_MASK_LABEL = 2
 
 
 def get_attention_mask(tokens, max_seq_len):
@@ -116,10 +120,30 @@ def only_mask_special_token(tokens: list, decoder: note_seq.encoder_decoder.OneH
     :return:
     """
     if special_class_ids is None:
-        special_class_ids = (note_seq.PerformanceEvent.TIME_SHIFT,
-                             note_seq.PerformanceEvent.VELOCITY,
-                             note_seq.PerformanceEvent.DURATION)
-    return [int(decoder.decode_event(e).event_type not in special_class_ids) for e in tokens]
+        special_class_ids = (note_seq.PerformanceEvent.VELOCITY,)
+    out = []
+    for e in tokens:
+        event_type = decoder.decode_event(e).event_type
+        if event_type in special_class_ids:
+            out.append(SPECIAL_MASK_LABEL)
+        else:
+            out.append(IGNORE_LABEL)
+    return out
+
+
+def mask_special_and_some_others(tokens: list, decoder: note_seq.encoder_decoder.OneHotEncoding,
+                                 special_class_ids=None, mask_non_special_prob=0.3):
+    if special_class_ids is None:
+        special_class_ids = (note_seq.PerformanceEvent.VELOCITY,)
+    out = []
+    for e in tokens:
+        event_type = decoder.decode_event(e).event_type
+        if event_type not in special_class_ids:
+            prob = random.random()
+            out.append(NORMAL_MASK_LABEL if prob <= mask_non_special_prob else IGNORE_LABEL)
+        else:
+            out.append(SPECIAL_MASK_LABEL)
+    return out
 
 
 def find_event_range(decoder, class_idx):
@@ -149,7 +173,8 @@ def random_token_walk(token_id, decoder, random_range=-1):
     return result
 
 
-def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, special_ids=None):
+def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, normal_mask_ratio=0.3,
+                     special_ids=None):
     """
     Mask performance tokens:
     - only timeshift and velocity events will be masked
@@ -158,6 +183,8 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
     :param token_ids:
     :param perf_config:
     :param mask_prob:
+    :param normal_mask_ratio:
+    :param special_ids:
     :return:
     """
     if perf_config is None:
@@ -174,18 +201,26 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
 
     # Obtain special tokens
     tokenizer = perf_config.encoder_decoder._one_hot_encoding
-    special_token_mask = [only_mask_special_token(val, tokenizer, special_class_ids=special_ids)
+
+    special_token_mask = [mask_special_and_some_others(val, tokenizer, special_class_ids=special_ids)
                           for val in token_ids.tolist()]
-    prob_matrix.masked_fill_(torch.tensor(special_token_mask, dtype=torch.bool), value=0.0)
+    # special_token_mask = [only_mask_special_token(val, tokenizer, special_class_ids=special_ids)
+    #                       for val in token_ids.tolist()]
+    token_tensor = torch.tensor(special_token_mask, dtype=torch.int)
+    # prob_matrix.masked_fill_(torch.tensor(token_tensor == SPECIAL_MASK_LABEL, dtype=torch.bool), value=mask_prob)
+    prob_matrix.masked_fill_(torch.tensor(token_tensor == IGNORE_LABEL, dtype=torch.bool), value=0.0)
+
     masked_indices = torch.bernoulli(prob_matrix).bool()
     labels[~masked_indices] = IGNORE_LABEL_INDEX
 
     # TODO: Implement mechanism for timeshift
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
     # default mask token is an unused midi
-    token_ids[indices_replaced] = tokenizer.encode_event(DEFAULT_MASK_EVENT)
 
-    # Random work 10%
+    token_ids[indices_replaced & (token_tensor == 1)] = tokenizer.encode_event(VELOCITY_MASK_EVENT)
+    token_ids[indices_replaced & (token_tensor == 2)] = tokenizer.encode_event(DEFAULT_MASK_EVENT)
+
+    # Random walk 10%
     indices_random = torch.bernoulli(torch.full(labels.shape, 0.1)).bool() & masked_indices & ~indices_replaced
     indices_to_replace = torch.nonzero(indices_random, as_tuple=True)
 

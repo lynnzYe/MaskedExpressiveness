@@ -51,7 +51,6 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
     for epoch in range(cfg.n_epochs):
         model.train()
         total_loss = 0
-
         train_num = 0
         for step, batch in enumerate(tqdm.tqdm(train_dataloader)):
             optimizer.zero_grad()
@@ -166,7 +165,7 @@ def run_mlm_train(cfg: ExpConfig = None):
                         dropout=cfg.dropout)
     print('n params:', count_parameters(model))
     model.to(cfg.device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     if cfg.resume_from is not None:
         print(f'\x1B[34m[Info]\033[0m Loading model from checkpoint: {cfg.resume_from}')
         load_model(model, optimizer, cpath=cfg.resume_from)
@@ -181,7 +180,7 @@ def train_velocitymlm():
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
-                    device=torch.device('mps'), mlm_prob=0.4, n_epochs=20,
+                    device=torch.device('mps'), mlm_prob=0.25, n_epochs=20,
                     )
     run_mlm_train(cfg)
 

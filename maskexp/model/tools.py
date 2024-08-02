@@ -5,7 +5,7 @@ import functools
 import os
 import note_seq
 from inspect import signature
-from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT
+from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT, VELOCITY_MASK_EVENT
 from pathlib import Path
 from maskexp.magenta.models.performance_rnn import performance_model
 
@@ -51,11 +51,19 @@ def decode_perf_logits(logits, decoder=None):
     return out
 
 
+def compare_perf_event(e, target_event):
+    if e.event_value == target_event.event_value and e.event_type == target_event.event_type:
+        return True
+    return False
+
+
 def print_perf_seq(perf_seq):
     outstr = ''
     for e in perf_seq:
-        if e.event_value == DEFAULT_MASK_EVENT.event_value and e.event_type == DEFAULT_MASK_EVENT.event_type:
+        if compare_perf_event(e, DEFAULT_MASK_EVENT):
             outstr += f'\x1B[34m[{e.event_type}-{e.event_value}],\033[0m\t'
+        elif compare_perf_event(e, VELOCITY_MASK_EVENT):
+            outstr += f'\x1B[33m[{e.event_type}-{e.event_value}],\033[0m\t'
         else:
             outstr += f'[{e.event_type}-{e.event_value}],\t'
     print(outstr)
@@ -117,7 +125,7 @@ def bind_metric(func, **kwargs):
 class ExpConfig:
     def __init__(self, model_name='', save_dir='', data_path='', perf_config_name='',
                  n_embed=256, n_layers=4, n_heads=4, dropout=0.1, max_seq_len=MAX_SEQ_LEN, special_tokens=None,
-                 device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, eval_interval=5, save_interval=5,
+                 device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, lr=1e-4, eval_interval=5, save_interval=5,
                  resume_from=None, train_loss=None, val_loss=None, epoch=0):
         assert os.path.exists(save_dir) and os.path.exists(data_path)
         ckpt_save_path = os.path.join(save_dir, model_name, '.pth')
@@ -142,6 +150,7 @@ class ExpConfig:
         self.dropout = dropout
 
         # Training Setting
+        self.lr = lr
         self.mlm_prob = mlm_prob
         self.device = device
         self.n_epochs = n_epochs
