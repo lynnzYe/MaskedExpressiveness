@@ -11,13 +11,8 @@ numpy==1.26.4
 Pillow==10.4.0
 pretty_midi==0.2.10
 protobuf==4.25.3
-pyaudio==0.2.14
-pygtrie==2.5.0
-pytest==8.3.2
-PyYAML==6.0.1
 PyYAML==6.0.1
 Requests==2.32.3
-rtmidi==2.5.0
 scipy==1.13.1
 six==1.16.0
 tensorflow==2.16.1
