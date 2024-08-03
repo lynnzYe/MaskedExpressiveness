@@ -12,7 +12,7 @@ import tqdm
 import note_seq
 import matplotlib.pyplot as plt
 
-NDEBUG = False
+NDEBUG = True
 
 
 def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, cfg=None, save_dir='checkpoint', name='checkpoint'):
@@ -88,8 +88,9 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                     attention_mask = batch[1]
 
                     # Mask tokens
-                    inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                         special_ids=cfg.special_tokens)
+                    inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config,
+                                                                mask_prob=cfg.mlm_prob,
+                                                                special_ids=cfg.special_tokens)
 
                     inputs = inputs.to(cfg.device)
                     attention_mask = attention_mask.to(cfg.device)

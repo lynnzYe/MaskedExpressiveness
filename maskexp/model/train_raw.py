@@ -12,7 +12,7 @@ import tqdm
 import note_seq
 import matplotlib.pyplot as plt
 
-NDEBUG = False
+NDEBUG = True
 
 
 def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, cfg=None, save_dir='checkpoint', name='checkpoint'):
@@ -59,7 +59,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
 
             # Mask tokens - mask velocity, noteon/off, timeshift, equally
             inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                        special_ids=cfg.special_tokens, normal_mask_ratio=1.0)
+                                                 special_ids=cfg.special_tokens, normal_mask_ratio=1.0)
             inputs = inputs.to(cfg.device)
             attention_mask = attention_mask.to(cfg.device)
             labels = labels.to(cfg.device)
@@ -89,8 +89,8 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
 
                     # Mask tokens
                     inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config,
-                                                                mask_prob=cfg.mlm_prob,
-                                                                special_ids=cfg.special_tokens)
+                                                         mask_prob=cfg.mlm_prob,
+                                                         special_ids=cfg.special_tokens)
 
                     inputs = inputs.to(cfg.device)
                     attention_mask = attention_mask.to(cfg.device)
@@ -177,7 +177,7 @@ def run_mlm_train(cfg: ExpConfig = None):
 
 def train_velocitymlm():
     cfg = ExpConfig(model_name='rawmlm', save_dir='save',
-                    data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
+                    data_path='/kaggle/input/mstro-with-dyn/mstro_with_dyn.pt',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
