@@ -3,4 +3,5 @@ import maskexp.model.train_ordinal as train_ordinal
 
 if __name__ == '__main__':
     # train_velocitymlm()
-    continue_velocitymlm()
+    # continue_velocitymlm()
+    train_ordinal.train_velocitymlm()
