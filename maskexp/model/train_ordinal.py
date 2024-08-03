@@ -114,11 +114,10 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                 val_loss.append(avg_val_loss)
 
         if (epoch + 1) % cfg.save_intv == 0 or epoch == cfg.n_epochs - 1:
-            # save_checkpoint(model, optimizer, epoch, train_loss, val_loss,
-            #                 save_dir=f'{cfg.save_dir}/checkpoints',
-            #                 name=cfg.model_name,
-            #                 cfg=cfg)
-            ''
+            save_checkpoint(model, optimizer, epoch, train_loss, val_loss,
+                            save_dir=f'{cfg.save_dir}/checkpoints',
+                            name=cfg.model_name,
+                            cfg=cfg)
     cont_train_loss = cfg.train_loss.copy()
     cont_val_loss = cfg.val_loss.copy()
     cont_train_loss.extend(train_loss)

@@ -159,7 +159,7 @@ class ExpConfig:
         psavedir = Path(save_dir)
         if not psavedir.exists():
             psavedir.mkdir(parents=True)
-        assert os.path.exists(save_dir) and os.path.exists(data_path)
+        assert os.path.exists(data_path)
         ckpt_save_path = os.path.join(save_dir, model_name, '.pth')
         if os.path.exists(ckpt_save_path):
             raise FileExistsError(f"found existing checkpoint file at {ckpt_save_path}")

@@ -20,7 +20,6 @@ Requests==2.32.3
 rtmidi==2.5.0
 scipy==1.13.1
 six==1.16.0
-scikit-image
 tensorflow==2.16.1
 tensorflow_datasets==4.9.6
 tensorflow_gan==2.1.0

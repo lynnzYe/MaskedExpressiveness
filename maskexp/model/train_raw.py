@@ -58,13 +58,13 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
             attention_mask = batch[1]
 
             # Mask tokens - mask velocity, noteon/off, timeshift, equally
-            inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
+            inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
                                                         special_ids=cfg.special_tokens, normal_mask_ratio=1.0)
             inputs = inputs.to(cfg.device)
             attention_mask = attention_mask.to(cfg.device)
             labels = labels.to(cfg.device)
 
-            loss, preds = model(inputs, attention_mask=attention_mask, labels=labels, token_type_ids=mask_ids)
+            loss, preds = model(inputs, attention_mask=attention_mask, labels=labels)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
@@ -88,7 +88,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                     attention_mask = batch[1]
 
                     # Mask tokens
-                    inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config,
+                    inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config,
                                                                 mask_prob=cfg.mlm_prob,
                                                                 special_ids=cfg.special_tokens)
 
@@ -96,7 +96,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                     attention_mask = attention_mask.to(cfg.device)
                     labels = labels.to(cfg.device)
 
-                    loss, logits = model(inputs, attention_mask=attention_mask, labels=labels, token_type_ids=mask_ids)
+                    loss, logits = model(inputs, attention_mask=attention_mask, labels=labels)
                     total_val_loss += loss.item()
                     val_num += 1
 
@@ -115,11 +115,10 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                 val_loss.append(avg_val_loss)
 
         if (epoch + 1) % cfg.save_intv == 0 or epoch == cfg.n_epochs - 1:
-            # save_checkpoint(model, optimizer, epoch, train_loss, val_loss,
-            #                 save_dir=f'{cfg.save_dir}/checkpoints',
-            #                 name=cfg.model_name,
-            #                 cfg=cfg)
-            ''
+            save_checkpoint(model, optimizer, epoch, train_loss, val_loss,
+                            save_dir=f'{cfg.save_dir}/checkpoints',
+                            name=cfg.model_name,
+                            cfg=cfg)
     cont_train_loss = cfg.train_loss.copy()
     cont_val_loss = cfg.val_loss.copy()
     cont_train_loss.extend(train_loss)
@@ -178,7 +177,7 @@ def run_mlm_train(cfg: ExpConfig = None):
 
 def train_velocitymlm():
     cfg = ExpConfig(model_name='rawmlm', save_dir='save',
-                    data_path='/kaggle/input/mstro-with-dyn/mstro_with_dyn.pt',
+                    data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
