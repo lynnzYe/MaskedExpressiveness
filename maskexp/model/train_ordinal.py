@@ -181,7 +181,7 @@ def train_velocitymlm():
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
-                    device=torch.device('mps'), mlm_prob=0.25, n_epochs=20, lr=1e-4
+                    device=torch.device('gpu'), mlm_prob=0.25, n_epochs=20, lr=1e-4
                     )
     run_mlm_train(cfg)
 
