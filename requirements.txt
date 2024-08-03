@@ -12,7 +12,7 @@ note_seq==0.0.5
 numpy==2.0.1
 Pillow==10.4.0
 pretty_midi==0.2.10
-protobuf==5.27.3
+protobuf==4.25.3
 pyaudio==0.2.14
 pygtrie==2.5.0
 pytest==8.3.2
