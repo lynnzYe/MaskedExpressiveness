@@ -36,12 +36,9 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
             input_ids = batch[0]
             attention_mask = batch[1]
 
-            decoded = [tokenizer.class_index_to_event(i, None) for i in input_ids[0, :].tolist()]
-            print("intpus:")
-            print_perf_seq(decoded)
             # Mask tokens
-            inputs, labels = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=0.15,
-                                              special_ids=(note_seq.PerformanceEvent.VELOCITY,))
+            inputs, labels, mask_type_tensor = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=0.15,
+                                                                special_ids=(note_seq.PerformanceEvent.VELOCITY,))
             inputs = inputs.to(device)
             attention_mask = attention_mask.to(device)
             labels = labels.to(device)
@@ -51,7 +48,7 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
 
             # Calculate and store each metric
             for metric in metrics:
-                metric_value = metric(logits, labels)
+                metric_value = metric(logits, labels, masks=mask_type_tensor)
                 if not math.isnan(metric_value):
                     test_metrics[metric.__name__].append(metric_value)
 
@@ -93,15 +90,24 @@ def run_mlm_test(test_settings: ExpConfig = None):
     model.to(test_settings.device)
     load_model(model, None, f'{test_settings.save_dir}/checkpoints/{test_settings.model_name}.pth')
 
-    hits_1, hits_3, hits_5 = (bind_metric(hits_at_k, k=1),
-                              bind_metric(hits_at_k, k=3),
-                              bind_metric(hits_at_k, k=5))
-    acc_wi_1, acc_wi_2, acc_wi_3 = (bind_metric(accuracy_within_n, n=1),
-                                    bind_metric(accuracy_within_n, n=2),
-                                    bind_metric(accuracy_within_n, n=3))
+    hits_1_all, hits_3_all, hits_5_all = (bind_metric(hits_at_k, k=1, consider_mask=torch.tensor([1, 2])),
+                                          bind_metric(hits_at_k, k=3, consider_mask=torch.tensor([1, 2])),
+                                          bind_metric(hits_at_k, k=5, consider_mask=torch.tensor([1, 2])))
+    hits_1, hits_3, hits_5 = (bind_metric(hits_at_k, k=1, consider_mask=torch.tensor([1])),
+                              bind_metric(hits_at_k, k=3, consider_mask=torch.tensor([1])),
+                              bind_metric(hits_at_k, k=5, consider_mask=torch.tensor([1])))
+    acc_w_1_all, acc_w_2_all, acc_w_3_all = (bind_metric(accuracy_within_n, n=1, consider_mask=torch.tensor([1, 2])),
+                                             bind_metric(accuracy_within_n, n=2, consider_mask=torch.tensor([1, 2])),
+                                             bind_metric(accuracy_within_n, n=3, consider_mask=torch.tensor([1, 2])))
+    acc_w_1, acc_w_2, acc_w_3 = (bind_metric(accuracy_within_n, n=1, consider_mask=torch.tensor([1])),
+                                 bind_metric(accuracy_within_n, n=2, consider_mask=torch.tensor([1])),
+                                 bind_metric(accuracy_within_n, n=3, consider_mask=torch.tensor([1])))
 
     avg_test_loss, metrics = test_mlm(model, perf_config, test,
-                                      metrics=[hits_1, hits_3, hits_5, acc_wi_1, acc_wi_2, acc_wi_3]
+                                      metrics=[
+                                          hits_1, hits_3, hits_5, hits_1_all, hits_3_all, hits_5_all,
+                                          acc_w_1, acc_w_2, acc_w_3, acc_w_1_all, acc_w_2_all, acc_w_3_all
+                                      ]
                                       )
     metrics['loss'] = avg_test_loss
 
@@ -241,7 +247,7 @@ def render_seq(midi_path, ckpt_path=None, mask_all_velocity=False):
 
 
 if __name__ == '__main__':
-    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm++++++.pth')
+    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
     # render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
-    #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm+++.pth',
+    #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
     #            mask_all_velocity=True)

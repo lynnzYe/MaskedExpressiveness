@@ -131,8 +131,17 @@ def only_mask_special_token(tokens: list, decoder: note_seq.encoder_decoder.OneH
     return out
 
 
-def mask_special_and_some_others(tokens: list, decoder: note_seq.encoder_decoder.OneHotEncoding,
-                                 special_class_ids=None, mask_non_special_prob=0.3):
+def mask_special_plus_others(tokens: list, decoder: note_seq.encoder_decoder.OneHotEncoding,
+                             special_class_ids=None, mask_non_special_prob=0.3):
+    """
+    This function will mark special class ids with SPECIAL_MASK_LABEL,
+    and some of the other classes with NORMAL_MASK_LABEL at P=${mask_non_special_prob}
+    :param tokens:
+    :param decoder:
+    :param special_class_ids:
+    :param mask_non_special_prob:
+    :return:
+    """
     if special_class_ids is None:
         special_class_ids = (note_seq.PerformanceEvent.VELOCITY,)
     out = []
@@ -202,23 +211,24 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
     # Obtain special tokens
     tokenizer = perf_config.encoder_decoder._one_hot_encoding
 
-    special_token_mask = [mask_special_and_some_others(val, tokenizer, special_class_ids=special_ids)
+    special_token_mask = [mask_special_plus_others(val, tokenizer, special_class_ids=special_ids)
                           for val in token_ids.tolist()]
     # special_token_mask = [only_mask_special_token(val, tokenizer, special_class_ids=special_ids)
     #                       for val in token_ids.tolist()]
-    token_tensor = torch.tensor(special_token_mask, dtype=torch.int)
+    mask_type_tensor = torch.tensor(special_token_mask, dtype=torch.int)
     # prob_matrix.masked_fill_(torch.tensor(token_tensor == SPECIAL_MASK_LABEL, dtype=torch.bool), value=mask_prob)
-    prob_matrix.masked_fill_(torch.tensor(token_tensor == IGNORE_LABEL, dtype=torch.bool), value=0.0)
+    prob_matrix.masked_fill_(torch.tensor(mask_type_tensor == IGNORE_LABEL, dtype=torch.bool), value=0.0)
 
     masked_indices = torch.bernoulli(prob_matrix).bool()
     labels[~masked_indices] = IGNORE_LABEL_INDEX
+    mask_type_tensor[~masked_indices] = 0
 
     # TODO: Implement mechanism for timeshift
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
     # default mask token is an unused midi
 
-    token_ids[indices_replaced & (token_tensor == 1)] = tokenizer.encode_event(VELOCITY_MASK_EVENT)
-    token_ids[indices_replaced & (token_tensor == 2)] = tokenizer.encode_event(DEFAULT_MASK_EVENT)
+    token_ids[indices_replaced & (mask_type_tensor == 1)] = tokenizer.encode_event(VELOCITY_MASK_EVENT)
+    token_ids[indices_replaced & (mask_type_tensor == 2)] = tokenizer.encode_event(DEFAULT_MASK_EVENT)
 
     # Random walk 10%
     indices_random = torch.bernoulli(torch.full(labels.shape, 0.1)).bool() & masked_indices & ~indices_replaced
@@ -230,7 +240,7 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
         token_ids[batch_idx, seq_idx] = random_token_walk(token_ids[batch_idx, seq_idx].item(), tokenizer)
 
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    return token_ids, labels
+    return token_ids, labels, mask_type_tensor
 
 
 def prepare_token_data(midi_file_list, train=0.8, val=0.1, perf_config=None, min_seq_len=64, max_seq_len=128):

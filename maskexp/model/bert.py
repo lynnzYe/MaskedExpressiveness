@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from maskexp.definitions import IGNORE_LABEL_INDEX
 
 
 class BertEmbeddings(torch.nn.Module):
@@ -226,7 +227,80 @@ class NanoBertMLM(nn.Module):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=IGNORE_LABEL_INDEX)
             loss = loss_fct(prediction_scores.view(-1, self.cls[-1].out_features), labels.view(-1))
+
+        return loss, prediction_scores
+
+
+def emd_loss(prediction_scores, labels, token_mask):
+    """
+    Compute Earth Mover's Distance loss for ordinal classification.
+
+    :param predictions:
+    :param targets:
+    :param num_classes:
+    :return:
+    """
+    prediction_scores = prediction_scores[token_mask]
+    labels = labels[token_mask]
+
+    num_classes = prediction_scores.size(-1)
+
+    # Convert labels to one-hot encoding
+    cumulative_true = F.one_hot(labels, num_classes=num_classes).cumsum(dim=1).to(torch.float32)
+    cumulative_pred = prediction_scores.cumsum(dim=1)
+
+    emd = torch.abs(cumulative_true - cumulative_pred).sum(dim=1)
+    return emd.mean()
+
+
+class NanoBertMLMOrdinalLoss(nn.Module):
+    def __init__(self, vocab_size, n_layers=2, n_heads=1, dropout=0.1, n_embed=3, max_seq_len=16,
+                 idx_ord_start=356, idx_ord_end=387):
+        super().__init__()
+        self.bert = NanoBERT(vocab_size=vocab_size, n_layers=n_layers, n_heads=n_heads, dropout=dropout,
+                             n_embed=n_embed, max_seq_len=max_seq_len)
+        self.cls = nn.Sequential(
+            nn.Linear(in_features=n_embed, out_features=n_embed),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(in_features=n_embed, out_features=vocab_size)
+        )
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+        sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        prediction_scores = self.cls(sequence_output)
+
+        loss = None
+        ce_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_LABEL_INDEX)
+        if labels is not None:
+            # Flatten prediction scores and labels for Cross Entropy Loss
+            flat_prediction_scores = prediction_scores.view(-1, self.cls[-1].out_features)
+            flat_labels = labels.view(-1)
+
+            # Compute mask for special tokens (id=1) and non-special tokens
+            if token_type_ids is not None:
+                special_token_mask = token_type_ids.view(-1) == 1  # Mask for special tokens
+                non_special_token_mask = ~special_token_mask  # Mask for non-special tokens
+
+                # Compute loss for special tokens using EMD
+                emd_loss_value = emd_loss(
+                    prediction_scores.view(-1, self.cls[-1].out_features),
+                    flat_labels,
+                    special_token_mask
+                )
+
+                # Compute loss for non-special tokens using Cross Entropy Loss
+                cross_entropy_loss_value = ce_loss(
+                    flat_prediction_scores[non_special_token_mask],
+                    flat_labels[non_special_token_mask]
+                )
+
+                # Combine the losses
+                loss = emd_loss_value + cross_entropy_loss_value
+            else:
+                # Default to Cross Entropy Loss if no token_type_ids are provided
+                loss = ce_loss(flat_prediction_scores, flat_labels)
 
         return loss, prediction_scores

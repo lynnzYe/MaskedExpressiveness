@@ -175,7 +175,7 @@ def run_mlm_train(cfg: ExpConfig = None):
 
 
 def train_velocitymlm():
-    cfg = ExpConfig(model_name='velocitymlm', save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
+    cfg = ExpConfig(model_name='ordinalmlm', save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
                     data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
@@ -186,7 +186,7 @@ def train_velocitymlm():
 
 
 def continue_velocitymlm():
-    ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth'
+    ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/ordinalmlm.pth'
     cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
     cfg.resume_from = ckpt_path
     run_mlm_train(cfg)
@@ -194,5 +194,5 @@ def continue_velocitymlm():
 
 if __name__ == '__main__':
     train_velocitymlm()
-    continue_velocitymlm()
+    # continue_velocitymlm()
     pass
