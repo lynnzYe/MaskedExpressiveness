@@ -178,7 +178,7 @@ def run_mlm_train(cfg: ExpConfig = None):
 
 def train_velocitymlm():
     cfg = ExpConfig(model_name='rawmlm', save_dir='save',
-                    data_path='/kaggle/input/mstro-with-dyn',
+                    data_path='/kaggle/input/mstro-with-dyn/mstro_with_dyn.pt',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
