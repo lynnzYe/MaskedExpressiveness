@@ -211,7 +211,9 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
     # Obtain special tokens
     tokenizer = perf_config.encoder_decoder._one_hot_encoding
 
-    special_token_mask = [mask_special_plus_others(val, tokenizer, special_class_ids=special_ids)
+    special_token_mask = [mask_special_plus_others(val, tokenizer,
+                                                   special_class_ids=special_ids,
+                                                   mask_non_special_prob=normal_mask_ratio)
                           for val in token_ids.tolist()]
     # special_token_mask = [only_mask_special_token(val, tokenizer, special_class_ids=special_ids)
     #                       for val in token_ids.tolist()]

@@ -156,6 +156,9 @@ class ExpConfig:
                  n_embed=256, n_layers=4, n_heads=4, dropout=0.1, max_seq_len=MAX_SEQ_LEN, special_tokens=None,
                  device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, lr=1e-4, eval_interval=5, save_interval=5,
                  resume_from=None, train_loss=None, val_loss=None, epoch=0):
+        psavedir = Path(save_dir)
+        if not psavedir.exists():
+            psavedir.mkdir(parents=True)
         assert os.path.exists(save_dir) and os.path.exists(data_path)
         ckpt_save_path = os.path.join(save_dir, model_name, '.pth')
         if os.path.exists(ckpt_save_path):

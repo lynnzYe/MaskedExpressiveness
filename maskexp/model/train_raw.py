@@ -3,7 +3,7 @@ from maskexp.definitions import DATA_DIR, OUTPUT_DIR
 from pathlib import Path
 from maskexp.util.prepare_data import mask_perf_tokens
 from maskexp.model.tools import print_perf_seq, decode_batch_perf_logits, MAX_SEQ_LEN, ExpConfig, load_model
-from maskexp.model.bert import NanoBertMLMOrdinalLoss
+from maskexp.model.bert import NanoBertMLM
 from maskexp.magenta.models.performance_rnn import performance_model
 import os
 import pickle
@@ -57,9 +57,9 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
             input_ids = batch[0]
             attention_mask = batch[1]
 
-            # Mask tokens
+            # Mask tokens - mask velocity, noteon/off, timeshift, equally
             inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                        special_ids=cfg.special_tokens)
+                                                        special_ids=cfg.special_tokens, normal_mask_ratio=1.0)
             inputs = inputs.to(cfg.device)
             attention_mask = attention_mask.to(cfg.device)
             labels = labels.to(cfg.device)
@@ -88,8 +88,9 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                     attention_mask = batch[1]
 
                     # Mask tokens
-                    inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                         special_ids=cfg.special_tokens)
+                    inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config,
+                                                                mask_prob=cfg.mlm_prob,
+                                                                special_ids=cfg.special_tokens)
 
                     inputs = inputs.to(cfg.device)
                     attention_mask = attention_mask.to(cfg.device)
@@ -158,12 +159,12 @@ def run_mlm_train(cfg: ExpConfig = None):
     train, val, _ = load_dataset(cfg.data_path)
     config = config
 
-    model = NanoBertMLMOrdinalLoss(vocab_size=config.encoder_decoder.num_classes,
-                                   n_embed=cfg.n_embed,
-                                   max_seq_len=cfg.max_seq_len,
-                                   n_layers=cfg.n_layers,
-                                   n_heads=cfg.n_heads,
-                                   dropout=cfg.dropout)
+    model = NanoBertMLM(vocab_size=config.encoder_decoder.num_classes,
+                        n_embed=cfg.n_embed,
+                        max_seq_len=cfg.max_seq_len,
+                        n_layers=cfg.n_layers,
+                        n_heads=cfg.n_heads,
+                        dropout=cfg.dropout)
     print('n params:', count_parameters(model))
     model.to(cfg.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
@@ -176,18 +177,18 @@ def run_mlm_train(cfg: ExpConfig = None):
 
 
 def train_velocitymlm():
-    cfg = ExpConfig(model_name='ordinalmlm', save_dir='save',
+    cfg = ExpConfig(model_name='rawmlm', save_dir='save',
                     data_path='/kaggle/input/mstro-with-dyn',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
-                    device=torch.device('mps'), mlm_prob=0.25, n_epochs=20, lr=1e-4
+                    device=torch.device('mps'), mlm_prob=0.15, n_epochs=20, lr=1e-4
                     )
     run_mlm_train(cfg)
 
 
 def continue_velocitymlm():
-    ckpt_path = 'save/checkpoints/ordinalmlm.pth'
+    ckpt_path = 'save/checkpoints/rawmlm.pth'
     cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
     cfg.resume_from = ckpt_path
     run_mlm_train(cfg)
