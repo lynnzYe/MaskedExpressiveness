@@ -304,3 +304,42 @@ class NanoBertMLMOrdinalLoss(nn.Module):
                 loss = ce_loss(flat_prediction_scores, flat_labels)
 
         return loss, prediction_scores
+
+
+def test_bert():
+    # Test configuration
+    vocab_size = 100
+    max_seq_len = 16
+    batch_size = 8
+
+    # Initialize model
+    model = NanoBertMLM(vocab_size=vocab_size)
+
+    # Generate random input data
+    input_ids = torch.randint(low=0, high=vocab_size, size=(batch_size, max_seq_len))
+    token_type_ids = torch.zeros_like(input_ids)  # Dummy token type ids
+    attention_mask = torch.ones_like(input_ids)  # Dummy attention mask
+    labels = torch.randint(low=0, high=vocab_size, size=(batch_size, max_seq_len))
+
+    # Optionally set some labels to ignore index to simulate masked labels
+    labels[torch.rand_like(labels, dtype=torch.float) < 0.2] = IGNORE_LABEL_INDEX
+
+    # Perform a forward pass
+    model.eval()  # Set model to evaluation mode
+    with torch.no_grad():
+        loss, prediction_scores = model(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask,
+                                        labels=labels)
+
+    # Check output
+    print(f"Loss: {loss.item() if loss is not None else 'N/A'}")
+    print(f"Prediction scores shape: {prediction_scores.shape}")
+
+    # Assertions to verify correct output
+    assert prediction_scores.shape == (batch_size, max_seq_len, vocab_size), "Incorrect prediction scores shape"
+    if loss is not None:
+        assert isinstance(loss.item(), float), "Loss is not a float value"
+
+
+# Run the test function
+if __name__ == '__main__':
+    test_bert()
