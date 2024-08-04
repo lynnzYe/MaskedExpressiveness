@@ -16,7 +16,7 @@ def load_model(model, optimizer=None, cpath=''):
     ckpt_path = Path(cpath)
     if not ckpt_path.exists():
         raise FileNotFoundError(f'Checkpoint file not found: {ckpt_path}')
-    ckpt = torch.load(ckpt_path)
+    ckpt = torch.load(ckpt_path, map_location=torch.device('mps'))
     load_model_from_pth(model, optimizer, ckpt)
 
 
@@ -39,6 +39,11 @@ def decode_batch_perf_logits(logits, decoder=None, idx=None):
     for tk in pred_ids:
         out.append(decoder.decode_event(tk))
     return out
+
+
+def logits_to_id(logits):
+    pred_ids = torch.argmax(F.softmax(logits, dim=-1), dim=-1).tolist()
+    return torch.tensor(pred_ids[0])
 
 
 def decode_perf_logits(logits, decoder=None):

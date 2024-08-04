@@ -1,15 +1,16 @@
 from maskexp.model.create_dataset import load_dataset
-from maskexp.definitions import DATA_DIR, DEFAULT_MASK_EVENT
+from maskexp.definitions import DATA_DIR, OUTPUT_DIR, SAVE_DIR, DEFAULT_MASK_EVENT, VELOCITY_MASK_EVENT
 from maskexp.util.prepare_data import mask_perf_tokens, get_attention_mask
 from maskexp.magenta.pipelines.performance_pipeline import get_full_token_pipeline
 from maskexp.util.tokenize_midi import extract_complete_tokens
 from tools import ExpConfig, load_model, load_model_from_pth, print_perf_seq, decode_batch_perf_logits, hits_at_k, \
-    accuracy_within_n, bind_metric, decode_perf_logits
-from maskexp.util.play_midi import syn_perfevent
+    accuracy_within_n, bind_metric, decode_perf_logits, logits_to_id
+from maskexp.util.play_midi import syn_perfevent, performance_events_to_pretty_midi
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.model.bert import NanoBertMLM
 from pathlib import Path
 import torch
+import random
 import functools
 import numpy as np
 import math
@@ -117,7 +118,7 @@ def run_mlm_test(test_settings: ExpConfig = None):
 
 
 def test_velocitymlm(ckpt_path):
-    cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
+    cfg = ExpConfig.load_from_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
     run_mlm_test(test_settings=cfg)
 
 
@@ -125,7 +126,7 @@ def pad_seq(tokens, pad_id=0, seq_len=256):
     return torch.tensor(np.pad(tokens, (0, seq_len - len(tokens)), mode='constant', constant_values=pad_id))
 
 
-def prepare_model_input(list_of_encodings, perf_config=None, seq_len=256):
+def prepare_model_input(list_of_encodings, perf_config=None, seq_len=128):
     """
     convert a list of one_hot encodings to array of appropriately-sized sequences for model prediction
     :param list_of_encodings:
@@ -137,6 +138,36 @@ def prepare_model_input(list_of_encodings, perf_config=None, seq_len=256):
     chunks = [torch.tensor(list_of_encodings[i:i + seq_len]) for i in range(0, len(list_of_encodings), seq_len)]
     masks = [torch.tensor(get_attention_mask(ck, max_seq_len=seq_len)) for ck in chunks]
     pad_token = perf_config.encoder_decoder.default_event_label
+    if len(chunks[-1]) < seq_len:
+        chunks[-1] = pad_seq(chunks[-1], pad_id=pad_token, seq_len=seq_len)
+
+    return chunks, masks
+
+
+def prepare_contextual_model_input(list_of_encodings, perf_config=None, seq_len=128,
+                                   overlap=0.5):
+    """
+    convert a list of one_hot encodings to array of appropriately-sized sequences (with overlap) for model prediction
+    :param list_of_encodings:
+    :param perf_config:
+    :param seq_len:
+    :param overlap:
+    :return:
+    """
+    if perf_config is None:
+        raise ValueError("need config")
+    # Calculate the stride based on the overlap
+    stride = int(seq_len * (1 - overlap))
+
+    # Create chunks with overlap
+    chunks = [torch.tensor(list_of_encodings[i:i + seq_len]) for i in
+              range(0, len(list_of_encodings) - stride, stride)]
+
+    pad_token = perf_config.encoder_decoder.default_event_label
+    # Create attention masks for each chunk
+    masks = [torch.tensor(get_attention_mask(ck, max_seq_len=seq_len)) for ck in chunks]
+
+    # Pad the last chunk if it's shorter than seq_len
     if len(chunks[-1]) < seq_len:
         chunks[-1] = pad_seq(chunks[-1], pad_id=pad_token, seq_len=seq_len)
 
@@ -176,7 +207,7 @@ def mask_velocity_demo_tokens(token_seq_list, perf_config=None):
     tokenizer = perf_config.encoder_decoder._one_hot_encoding
     for seq in token_seq_list:
         mask = torch.tensor(get_demo_token_mask(seq, tokenizer))
-        seq[mask] = tokenizer.encode_event(DEFAULT_MASK_EVENT)
+        seq[mask] = tokenizer.encode_event(VELOCITY_MASK_EVENT)
 
 
 def mlm_pred(model, perf_config, input_list, mask_list, device=torch.device('mps')):
@@ -195,11 +226,118 @@ def mlm_pred(model, perf_config, input_list, mask_list, device=torch.device('mps
             attention_mask = mask_list[i].unsqueeze(0).to(device)
             _, logits = model(inputs, attention_mask=attention_mask, labels=None)
             out.extend(decode_perf_logits(logits, tokenizer._one_hot_encoding))
+
+    input_decoded = [tokenizer.class_index_to_event(i, None) for i in input_list[0].tolist()]
+    output_decoded = out[:len(input_decoded)]
+    print("Input 128:")
+    print_perf_seq(input_decoded)
+    print("Output 128:")
+    print_perf_seq(output_decoded)
     return out
 
 
-def run_mlm_pred(pth, inputs, masks):
+def step_contextual_velocity_mlm_pred(model, input_ids, mask, start_index=0, num_to_replace=0, overlap=0.5,
+                                      device=torch.device('mps'), replace_id=2):
+    """
+    Predict and replace % of the special token
+    :param model:
+    :param input_ids:
+        masked tokens are replaced with VELOCITY_MASK_TOKEN
+        cover_percent of them will be replaced per call
+    :param mask:
+    :param num_to_replace:
+    :param overlap:
+    :param device:
+    :param replace_id:
+    :return: updated input_ids, and a bool status whether all are replaced
+    """
+    assert len(input_ids) == len(mask)
+    if num_to_replace == 0:
+        print("\x1B[33m[Warning]\033[0m no replacement asked. returning")
+        return input_ids, False
+    model.eval()
+
+    with torch.no_grad():
+        replace_ids = input_ids == replace_id
+        available_indices = replace_ids.nonzero(as_tuple=True)[0]
+        replaceable_indices = available_indices[available_indices >= start_index]
+        if len(replaceable_indices) == 0:
+            # print("\x1B[34m[Info]\033[0m no more replaceable indices!")
+            return input_ids, False
+
+        input_ids = input_ids.to(device)
+        mask = mask.to(device)
+        _, logits = model(input_ids.unsqueeze(0), attention_mask=mask.unsqueeze(0), labels=None)
+        output_ids = logits_to_id(logits).to(device)
+
+        # Randomly choose which indices to replace
+        indices_to_replace = torch.randperm(len(replaceable_indices))[:num_to_replace]
+
+        # Replace selected tokens with predicted tokens
+        input_ids[replaceable_indices[indices_to_replace]] = output_ids[
+            replaceable_indices[indices_to_replace]]
+
+    return input_ids, True
+
+
+def run_mlm_pred_full(pth, inputs, masks):
+    """
+    Predict all the masked events at once
+    :param pth:
+    :param inputs:
+    :param masks:
+    :return:
+    """
     perf_config = performance_model.default_configs[pth['perf_config_name']]
+
+    model = NanoBertMLM(vocab_size=perf_config.encoder_decoder.num_classes,
+                        n_embed=pth['n_embed'],
+                        max_seq_len=pth['max_seq_len'],
+                        n_layers=pth['n_layers'],
+                        n_heads=pth['n_heads'],
+                        dropout=pth['dropout'])
+    model.to(pth['device'])
+    model.to(pth['device'])
+    load_model_from_pth(model, optimizer=None, pth=pth)
+    return mlm_pred(model, perf_config, inputs, masks, device=pth['device'])
+
+
+def get_overlap_length(seq_len, overlap):
+    return seq_len - int(seq_len * overlap)
+
+
+def decode_overlapped_ids(input_id_list, decoder, overlap=0.5):
+    """
+
+    :param input_id_list:
+    :param overlap:
+    :return:
+    """
+    assert isinstance(input_id_list[0][0], torch.Tensor)
+    decoded = []
+    seq_len = len(input_id_list[0])
+    overlap_end_idx = get_overlap_length(seq_len, overlap)
+    for i, ids in enumerate(input_id_list):
+        if i == 0:
+            decoded.extend([decoder.decode_event(e.item()) for e in ids])
+        else:
+            decoded.extend([decoder.decode_event(e.item()) for e in ids[overlap_end_idx:]])
+    return decoded
+
+
+def run_contextual_mlm_pred(pth, inputs, masks, overlap=0.5, step_percent=0.1):
+    """
+    Sliding window + step-by-step generation
+    :param pth: Configuration dictionary containing model and device settings
+    :param inputs: List of input tensors
+    :param masks: List of attention masks corresponding to the inputs
+    :param overlap: Fraction of overlap between consecutive input sequences
+    :param step_percent: Percentage of masked tokens to replace in each step
+    :return: None
+    """
+    assert 0 < step_percent <= 1
+    perf_config = performance_model.default_configs[pth['perf_config_name']]
+
     model = NanoBertMLM(vocab_size=perf_config.encoder_decoder.num_classes,
                         n_embed=pth['n_embed'],
                         max_seq_len=pth['max_seq_len'],
@@ -208,14 +346,72 @@ def run_mlm_pred(pth, inputs, masks):
                         dropout=pth['dropout'])
     model.to(pth['device'])
     load_model_from_pth(model, optimizer=None, pth=pth)
-    return mlm_pred(model, perf_config, inputs, masks, device=pth['device'])
+
+    seq_len = inputs[0].size(0)
+    # velocity, note-on, note-off, time-shifts. Velocity occupies approximately 1/4 of the inputs
+    approx_velocity_event_count = int(seq_len / 4)
+    num_pred_per_step = int(approx_velocity_event_count * step_percent)
+    init_num_pred = int(num_pred_per_step / (1 - overlap))  # The more overlap, the more it should predict
+    n_iterations = int((approx_velocity_event_count * (1 - overlap)) // num_pred_per_step + 1)
+    overlap_length = get_overlap_length(seq_len, overlap)
+    decoder = perf_config.encoder_decoder._one_hot_encoding
+    replace_id = decoder.encode_event(VELOCITY_MASK_EVENT)
+
+    inputs = [e.to(pth['device']) for e in inputs]
+    masks = [e.to(pth['device']) for e in masks]
+
+    while True:
+        round_status = []
+        for i_input, (input_ids, mask) in enumerate(zip(inputs, masks)):
+            pred_ids, status = step_contextual_velocity_mlm_pred(model, input_ids, mask,
+                                                                 start_index=0 if i_input == 0 else overlap_length,
+                                                                 overlap=overlap,
+                                                                 num_to_replace=init_num_pred if i_input == 0 else num_pred_per_step,
+                                                                 device=pth['device'],
+                                                                 replace_id=replace_id)
+            round_status.append(status)
+            # indices = torch.where(input_ids != pred_ids)[0]
+            # print(f"After modification: {i_input}", [(e.item(), pred_ids[e].item()) for e in indices])
+            inputs[i_input] = pred_ids
+            if i_input < len(inputs) - 1:
+                # update the next input ids % percent with updated current input_ids
+                inputs[i_input + 1][:overlap_length] = pred_ids[overlap_length:]
+        if all(x == False for x in round_status):
+            break
+
+    for i, e in enumerate(inputs):
+        if torch.any(e == 2):
+            print(f"\x1B[33m[Warning]\033[0m Input No.{i} still have {torch.sum(e == 2).item()} velocity masks")
+
+    perf_tokens = decode_overlapped_ids(inputs, decoder)
+    return perf_tokens
 
 
 def mask_all_velocity_ids(token_ids, perf_config):
-    mask_id = perf_config.encoder_decoder._one_hot_encoding.encode_event(DEFAULT_MASK_EVENT)
+    mask_id = perf_config.encoder_decoder._one_hot_encoding.encode_event(VELOCITY_MASK_EVENT)
     for i, e in enumerate(token_ids):
         event = perf_config.encoder_decoder._one_hot_encoding.decode_event(e)
         if event.event_type == note_seq.PerformanceEvent.VELOCITY:
+            token_ids[i] = mask_id
+
+    return token_ids
+
+
+def mask_some_velocity_ids(token_ids, perf_config, mask_prob=0.9):
+    mask_id = perf_config.encoder_decoder._one_hot_encoding.encode_event(VELOCITY_MASK_EVENT)
+    for i, e in enumerate(token_ids):
+        event = perf_config.encoder_decoder._one_hot_encoding.decode_event(e)
+        prob = random.random()
+        if event.event_type == note_seq.PerformanceEvent.VELOCITY and prob < mask_prob:
+            token_ids[i] = mask_id
+    return token_ids
+
+
+def mask_min_velocity_ids(token_ids, perf_config):
+    mask_id = perf_config.encoder_decoder._one_hot_encoding.encode_event(VELOCITY_MASK_EVENT)
+    for i, e in enumerate(token_ids):
+        event = perf_config.encoder_decoder._one_hot_encoding.decode_event(e)
+        if event.event_type == note_seq.PerformanceEvent.VELOCITY and event.event_value == 1:
             token_ids[i] = mask_id
 
 
@@ -237,17 +433,76 @@ def render_seq(midi_path, ckpt_path=None, mask_all_velocity=False):
 
     inputs, masks = prepare_model_input(tokens, perf_config, seq_len=pth['max_seq_len'])
     if mask_all_velocity:
-        for ids in inputs:
-            mask_all_velocity_ids(ids, perf_config)
+        for i, ids in enumerate(inputs):
+            # mask_all_velocity_ids(ids, perf_config)
+            inputs[i] = mask_some_velocity_ids(ids, perf_config)
 
     # Model Prediction
-    out = run_mlm_pred(pth, inputs, masks)
+    out = run_mlm_pred_full(pth, inputs, masks)
+    midi = performance_events_to_pretty_midi(out, perf_config.num_velocity_bins)
+    midi.write(f'{OUTPUT_DIR}/demo1.mid')
     syn_perfevent(out, filename='demo1.wav', n_velocity_bin=perf_config.num_velocity_bins)
     pass
 
 
+def render_contextual_seq(midi_path, ckpt_path=None, mask_all_velocity=False, overlap=.5):
+    """
+    Predict velocity for masked midi events
+        -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
+        -> generation by the simplest strategy -> shift by max-seq-len, no window overlap
+    :param midi_path:
+    :param ckpt_path: path to the checkpoint (which should also contain the model settings, losses etc.)
+    :param mask_all_velocity:
+    :param overlap:
+    :return:
+    """
+    if ckpt_path is None:
+        raise ValueError("Config path must be provided")
+    pth = torch.load(ckpt_path)
+    cfg = ExpConfig.load_from_dict(pth)
+    perf_config = performance_model.default_configs[cfg.perf_config_name]
+    tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
+
+    overlapped_inputs, masks = prepare_contextual_model_input(tokens, perf_config, seq_len=pth['max_seq_len'],
+                                                              overlap=.5)
+    for i, ids in enumerate(overlapped_inputs):
+        overlapped_inputs[i] = mask_all_velocity_ids(ids, perf_config) if mask_all_velocity \
+            else mask_some_velocity_ids(ids, perf_config, mask_prob=0.9)
+
+    if not mask_all_velocity:
+        masked_input = decode_overlapped_ids(overlapped_inputs, perf_config.encoder_decoder._one_hot_encoding,
+                                             overlap=overlap)
+        masked_mid = performance_events_to_pretty_midi(masked_input,
+                                                       steps_per_second=perf_config.steps_per_second,
+                                                       n_velocity_bin=perf_config.num_velocity_bins)
+        masked_mid.write(f'{OUTPUT_DIR}/demo1-input.mid')
+
+    # Model Prediction
+    out = run_contextual_mlm_pred(pth, overlapped_inputs, masks, overlap=overlap)
+
+    midi = performance_events_to_pretty_midi(out, perf_config.num_velocity_bins)
+    midi.write(f'{OUTPUT_DIR}/demo1.mid')
+    syn_perfevent(out, filename='demo1.wav', n_velocity_bin=perf_config.num_velocity_bins)
+    pass
+
+
+def convert_kaggle_mlm(pth):
+    data = torch.load(pth, map_location=torch.device('cpu'))
+    data['device'] = torch.device('mps')
+    data['save_dir'] = SAVE_DIR
+    data['data_path'] = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt'
+    torch.save(data, f'{SAVE_DIR}/checkpoints/kg_{data["model_name"]}.pth')
+
+
 if __name__ == '__main__':
-    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
+    # convert_kaggle_mlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/rawmlm.pth')
+    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth')
+    # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
     # render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
     #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
     #            mask_all_velocity=True)
+
+    # render_contextual_seq(
+    #     '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+    #     ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
+    #     mask_all_velocity=False)

@@ -4,36 +4,51 @@ import note_seq
 from note_seq import PerformanceEvent
 import numpy as np
 from scipy.io.wavfile import write as write_wav
-from maskexp.definitions import OUTPUT_DIR, ROOT_DIR
+from maskexp.definitions import OUTPUT_DIR, ROOT_DIR, VELOCITY_MASK_EVENT
 from note_seq.testing_lib import add_track_to_sequence
 
 
 def note_sequence_to_performance_events(note_sequence, steps_per_quarter=100):
     quantized_note_sequence = note_seq.sequences_lib.quantize_note_sequence(note_sequence, steps_per_quarter)
     perfs = note_seq.performance_lib.BasePerformance._from_quantized_sequence(quantized_note_sequence, 0,
-                                                                              num_velocity_bins=127,
-                                                                              max_shift_steps=10000)
+                                                                              num_velocity_bins=32,
+                                                                              max_shift_steps=100)
 
     return perfs
 
 
-def performance_events_to_pretty_midi(events: list[PerformanceEvent], n_velocity_bin=32):
+def performance_events_to_pretty_midi(events: list[PerformanceEvent], steps_per_second=100, n_velocity_bin=32,
+                                      mask_notes_without_velocity=False):
+    # performance = note_seq.Performance(
+    #     quantized_sequence=None,
+    #     steps_per_second=steps_per_second,
+    #     num_velocity_bins=n_velocity_bin)
+    # for e in events:
+    #     performance.append(e)
+    # ns = performance.to_sequence()
+    # return note_seq.midi_io.note_sequence_to_pretty_midi(ns)
+
     pm = pretty_midi.PrettyMIDI()
     instrument = pretty_midi.Instrument(program=0)
     time = 0
     active_notes = {}
-    current_velocity = 100
+    current_velocity = 1
 
     for event in events:
         if event.event_type == PerformanceEvent.TIME_SHIFT:
             time += event.event_value / note_seq.DEFAULT_QUARTERS_PER_MINUTE
         elif event.event_type == PerformanceEvent.NOTE_ON:
+            if event.event_value == VELOCITY_MASK_EVENT.event_value:
+                current_velocity = 1
+                continue
             note = pretty_midi.Note(
                 velocity=current_velocity,
                 pitch=event.event_value,
                 start=time,
                 end=time
             )
+            if mask_notes_without_velocity:
+                current_velocity = 1
             active_notes[event.event_value] = note
             instrument.notes.append(note)
         elif event.event_type == PerformanceEvent.NOTE_OFF:
@@ -91,6 +106,8 @@ def test_noteset_to_perf():
     ]
     add_track_to_sequence(note_sequence, 0, notes)
     perf = note_sequence_to_performance_events(note_sequence)
+    midi = performance_events_to_pretty_midi(perf, n_velocity_bin=32)
+    midi.write(OUTPUT_DIR + '/test_ctp.mid')
     syn_perfevent(perf, 'test_ctp.wav')
 
 

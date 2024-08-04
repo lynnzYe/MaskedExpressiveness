@@ -114,7 +114,7 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                 val_loss.append(avg_val_loss)
 
         if (epoch + 1) % cfg.save_intv == 0 or epoch == cfg.n_epochs - 1:
-            save_checkpoint(model, optimizer, epoch, train_loss, val_loss,
+            save_checkpoint(model, optimizer, epoch + 1, train_loss, val_loss,
                             save_dir=f'{cfg.save_dir}/checkpoints',
                             name=cfg.model_name,
                             cfg=cfg)
@@ -189,6 +189,7 @@ def continue_velocitymlm():
     ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth'
     cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
     cfg.resume_from = ckpt_path
+    cfg.model_name = 'weighted_mask_continue'
     run_mlm_train(cfg)
 
 
