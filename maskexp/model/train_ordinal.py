@@ -1,5 +1,5 @@
 from maskexp.model.create_dataset import load_dataset
-from maskexp.definitions import DATA_DIR, OUTPUT_DIR
+from maskexp.definitions import DATA_DIR, OUTPUT_DIR, SAVE_DIR
 from pathlib import Path
 from maskexp.util.prepare_data import mask_perf_tokens
 from maskexp.model.tools import print_perf_seq, decode_batch_perf_logits, MAX_SEQ_LEN, ExpConfig, load_model
@@ -189,6 +189,34 @@ def continue_velocitymlm():
     ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/ordinalmlm.pth'
     cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
     cfg.resume_from = ckpt_path
+    run_mlm_train(cfg)
+
+
+def train(name, data_path, device_str, resume_from=None, save_dir=SAVE_DIR):
+    """
+    Train weighted masked model
+    :param name:
+    :param data_path:
+    :param device_str:
+    :param resume_from:
+    :param save_dir:
+    :return:
+    """
+    if resume_from is not None:
+        cfg = ExpConfig.load_from_dict(torch.load(resume_from))
+        cfg.model_name = name
+        cfg.save_dir = save_dir
+        cfg.data_path = data_path
+        cfg.device = torch.device(device_str)
+        cfg.resume_from = resume_from
+    else:
+        cfg = ExpConfig(model_name=name, save_dir=save_dir,
+                        data_path=data_path,
+                        perf_config_name='performance_with_dynamics',
+                        special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
+                        n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
+                        device=torch.device(device_str), mlm_prob=0.25, n_epochs=20, lr=1e-4
+                        )
     run_mlm_train(cfg)
 
 
