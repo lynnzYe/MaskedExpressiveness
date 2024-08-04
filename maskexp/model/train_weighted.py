@@ -3,7 +3,7 @@ from maskexp.definitions import DATA_DIR, OUTPUT_DIR, SAVE_DIR, NDEBUG
 from pathlib import Path
 from maskexp.util.prepare_data import mask_perf_tokens
 from maskexp.model.tools import print_perf_seq, decode_batch_perf_logits, MAX_SEQ_LEN, ExpConfig, load_model, \
-    save_checkpoint
+    save_checkpoint, load_torch_model
 from maskexp.model.bert import NanoBertMLM
 from maskexp.magenta.models.performance_rnn import performance_model
 import os
@@ -159,7 +159,7 @@ def train_velocitymlm():
 
 def continue_velocitymlm():
     ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth'
-    cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
+    cfg = ExpConfig.load_from_dict(load_torch_model(ckpt_path))
     cfg.resume_from = ckpt_path
     cfg.model_name = 'weighted_mask_continue'
     run_mlm_train(cfg)
@@ -176,7 +176,7 @@ def train(name, data_path, device_str, resume_from=None, save_dir=SAVE_DIR):
     :return:
     """
     if resume_from is not None:
-        cfg = ExpConfig.load_from_dict(torch.load(resume_from))
+        cfg = ExpConfig.load_from_dict(load_torch_model(resume_from))
         cfg.model_name = name
         cfg.save_dir = save_dir
         cfg.data_path = data_path

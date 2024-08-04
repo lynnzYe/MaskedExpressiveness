@@ -4,7 +4,7 @@ from maskexp.util.prepare_data import mask_perf_tokens, get_attention_mask
 from maskexp.magenta.pipelines.performance_pipeline import get_full_token_pipeline
 from maskexp.util.tokenize_midi import extract_complete_tokens
 from tools import ExpConfig, load_model, load_model_from_pth, print_perf_seq, decode_batch_perf_logits, hits_at_k, \
-    accuracy_within_n, bind_metric, decode_perf_logits, logits_to_id
+    accuracy_within_n, bind_metric, decode_perf_logits, logits_to_id, load_torch_model
 from maskexp.util.play_midi import syn_perfevent, performance_events_to_pretty_midi
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.model.bert import NanoBertMLM
@@ -118,7 +118,7 @@ def run_mlm_test(test_settings: ExpConfig = None):
 
 
 def test_velocitymlm(ckpt_path):
-    cfg = ExpConfig.load_from_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
+    cfg = ExpConfig.load_from_dict(load_torch_model(ckpt_path))
     run_mlm_test(test_settings=cfg)
 
 
@@ -426,7 +426,7 @@ def render_seq(midi_path, ckpt_path=None, mask_all_velocity=False):
     """
     if ckpt_path is None:
         raise ValueError("Config path must be provided")
-    pth = torch.load(ckpt_path)
+    pth = load_torch_model(ckpt_path)
     cfg = ExpConfig.load_from_dict(pth)
     perf_config = performance_model.default_configs[cfg.perf_config_name]
     tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
@@ -445,7 +445,7 @@ def render_seq(midi_path, ckpt_path=None, mask_all_velocity=False):
     pass
 
 
-def render_contextual_seq(midi_path, ckpt_path=None, mask_all_velocity=False, overlap=.5):
+def render_contextual_seq(midi_path, ckpt_path=None, mask_all_velocity=False, overlap=.5, file_stem='demo'):
     """
     Predict velocity for masked midi events
         -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
@@ -458,7 +458,7 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_all_velocity=False, ov
     """
     if ckpt_path is None:
         raise ValueError("Config path must be provided")
-    pth = torch.load(ckpt_path)
+    pth = load_torch_model(ckpt_path)
     cfg = ExpConfig.load_from_dict(pth)
     perf_config = performance_model.default_configs[cfg.perf_config_name]
     tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
@@ -475,19 +475,19 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_all_velocity=False, ov
         masked_mid = performance_events_to_pretty_midi(masked_input,
                                                        steps_per_second=perf_config.steps_per_second,
                                                        n_velocity_bin=perf_config.num_velocity_bins)
-        masked_mid.write(f'{OUTPUT_DIR}/demo1-input.mid')
+        masked_mid.write(f'{OUTPUT_DIR}/{file_stem}-input.mid')
 
     # Model Prediction
     out = run_contextual_mlm_pred(pth, overlapped_inputs, masks, overlap=overlap)
 
     midi = performance_events_to_pretty_midi(out, perf_config.num_velocity_bins)
-    midi.write(f'{OUTPUT_DIR}/demo1.mid')
-    syn_perfevent(out, filename='demo1.wav', n_velocity_bin=perf_config.num_velocity_bins)
+    midi.write(f'{OUTPUT_DIR}/{file_stem}.mid')
+    # syn_perfevent(out, filename=f'{file_stem}.wav', n_velocity_bin=perf_config.num_velocity_bins)
     pass
 
 
 def convert_kaggle_mlm(pth):
-    data = torch.load(pth, map_location=torch.device('cpu'))
+    data = load_torch_model(pth)
     data['device'] = torch.device('mps')
     data['save_dir'] = SAVE_DIR
     data['data_path'] = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt'
@@ -496,13 +496,14 @@ def convert_kaggle_mlm(pth):
 
 if __name__ == '__main__':
     # convert_kaggle_mlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/rawmlm.pth')
-    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth')
+    # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth')
     # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
+
     # render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
     #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
     #            mask_all_velocity=True)
 
-    # render_contextual_seq(
-    #     '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
-    #     ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
-    #     mask_all_velocity=False)
+    render_contextual_seq(
+        '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+        ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
+        mask_all_velocity=False)
