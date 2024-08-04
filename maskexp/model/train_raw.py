@@ -29,9 +29,9 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
             input_ids = batch[0]
             attention_mask = batch[1]
 
-            # Mask tokens
+            # Mask tokens - mask velocity, noteon/off, timeshift, equally
             inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                 special_ids=cfg.special_tokens)
+                                                 special_ids=cfg.special_tokens, normal_mask_ratio=1.0)
             inputs = inputs.to(cfg.device)
             attention_mask = attention_mask.to(cfg.device)
             labels = labels.to(cfg.device)
@@ -60,7 +60,8 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                     attention_mask = batch[1]
 
                     # Mask tokens
-                    inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
+                    inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config,
+                                                         mask_prob=cfg.mlm_prob,
                                                          special_ids=cfg.special_tokens)
 
                     inputs = inputs.to(cfg.device)
@@ -147,21 +148,20 @@ def run_mlm_train(cfg: ExpConfig = None):
 
 
 def train_velocitymlm():
-    cfg = ExpConfig(model_name='velocitymlm', save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
-                    data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
+    cfg = ExpConfig(model_name='rawmlm', save_dir='save',
+                    data_path='/kaggle/input/mstro-with-dyn/mstro_with_dyn.pt',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
-                    device=torch.device('mps'), mlm_prob=0.25, n_epochs=20, lr=1e-4
+                    device=torch.device('cuda'), mlm_prob=0.15, n_epochs=20, lr=1e-4
                     )
     run_mlm_train(cfg)
 
 
 def continue_velocitymlm():
-    ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth'
+    ckpt_path = 'save/checkpoints/rawmlm.pth'
     cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
     cfg.resume_from = ckpt_path
-    cfg.model_name = 'weighted_mask_continue'
     run_mlm_train(cfg)
 
 
@@ -195,5 +195,5 @@ def train(name, data_path, device_str, resume_from=None, save_dir=SAVE_DIR):
 
 if __name__ == '__main__':
     train_velocitymlm()
-    continue_velocitymlm()
+    # continue_velocitymlm()
     pass

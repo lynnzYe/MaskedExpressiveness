@@ -4,12 +4,105 @@ import torch.nn.functional as F
 import functools
 import os
 import note_seq
+import json
 from inspect import signature
 from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT, VELOCITY_MASK_EVENT
 from pathlib import Path
 from maskexp.magenta.models.performance_rnn import performance_model
 
 MAX_SEQ_LEN = 128
+
+
+class ExpConfig:
+    def __init__(self, model_name='', save_dir='', data_path='', perf_config_name='',
+                 n_embed=256, n_layers=4, n_heads=4, dropout=0.1, max_seq_len=MAX_SEQ_LEN, special_tokens=None,
+                 device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, lr=1e-4, eval_interval=5, save_interval=5,
+                 resume_from=None, train_loss=None, val_loss=None, total_epoch_num=0):
+        psavedir = Path(save_dir)
+        if not psavedir.exists():
+            psavedir.mkdir(parents=True)
+        assert os.path.exists(data_path)
+        ckpt_save_path = os.path.join(save_dir, model_name, '.pth')
+        if os.path.exists(ckpt_save_path):
+            raise FileExistsError(f"found existing checkpoint file at {ckpt_save_path}")
+        if perf_config_name not in performance_model.default_configs.keys():
+            raise KeyError(f"Performance config key: {perf_config_name} not found")
+        if special_tokens is None:
+            print("\x1B[33m[Warning]\033[0m Special token(s) is required for MLM training")
+
+        # IO Paths
+        self.model_name = model_name  # Will be used to name the saved file
+        self.save_dir = save_dir  # two folders will be created - checkpoints, logs
+        self.data_path = data_path
+        self.perf_config_name = perf_config_name
+
+        # Model Setting
+        self.n_embed = n_embed
+        self.max_seq_len = max_seq_len
+        self.n_layers = n_layers
+        self.n_heads = n_heads
+        self.dropout = dropout
+
+        # Training Setting
+        self.lr = lr
+        self.mlm_prob = mlm_prob
+        self.device = device
+        self.n_epochs = n_epochs
+        self.eval_intv = eval_interval
+        self.save_intv = save_interval
+        self.special_tokens = special_tokens
+
+        self.resume_from = resume_from  # Provide checkpoint path to resume
+
+        self.train_loss = [] if train_loss is None else train_loss
+        self.val_loss = [] if val_loss is None else val_loss
+        self.total_epoch_num = total_epoch_num
+
+    @classmethod
+    def load_from_dict(cls, json_cfg):
+        init_params = signature(cls.__init__).parameters
+        filtered_cfg = {key: value for key, value in json_cfg.items() if key in init_params}
+        return cls(**filtered_cfg)
+
+    def serialize(self):
+        params = signature(self.__init__).parameters
+        data = {param: getattr(self, param) for param in params if
+                hasattr(self, param) and isinstance(getattr(self, param), (int, str, float))}
+        return json.dumps(data, indent=4)
+
+
+def print_model(ckpt_path):
+    pth = torch.load(ckpt_path)
+    cfg = ExpConfig.load_from_dict(pth)
+    print(cfg.serialize())
+
+
+def save_checkpoint(model, optimizer, num_epoch, train_loss, val_loss, cfg: ExpConfig = None, save_dir='checkpoint',
+                    name='checkpoint'):
+    path = Path(save_dir)
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=False)
+
+    all_train_loss = cfg.train_loss.copy()
+    all_train_loss.extend(train_loss)
+
+    all_val_loss = cfg.val_loss.copy()
+    all_val_loss.extend(val_loss)
+
+    checkpoint = {
+        'total_epoch_num': cfg.total_epoch_num + num_epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'train_loss': all_train_loss,
+        'val_loss': all_val_loss
+    }
+    if cfg is None:
+        print("\x1B[33m[Warning]\033[0m model setting is not provided...recording only the state dict and losses")
+    else:
+        checkpoint = cfg.__dict__ | checkpoint
+
+    torch.save(checkpoint, f'{save_dir}/{name}.pth')
+    print(f"\x1B[34m[Info]\033[0m Checkpoint saved to {save_dir}/{name}.pth")
 
 
 def load_model(model, optimizer=None, cpath=''):
@@ -156,50 +249,5 @@ def bind_metric(func, **kwargs):
     return partial_func
 
 
-class ExpConfig:
-    def __init__(self, model_name='', save_dir='', data_path='', perf_config_name='',
-                 n_embed=256, n_layers=4, n_heads=4, dropout=0.1, max_seq_len=MAX_SEQ_LEN, special_tokens=None,
-                 device=torch.device('mps'), n_epochs=20, mlm_prob=0.15, lr=1e-4, eval_interval=5, save_interval=5,
-                 resume_from=None, train_loss=None, val_loss=None, epoch=0):
-        assert os.path.exists(save_dir) and os.path.exists(data_path)
-        ckpt_save_path = os.path.join(save_dir, model_name, '.pth')
-        if os.path.exists(ckpt_save_path):
-            raise FileExistsError(f"found existing checkpoint file at {ckpt_save_path}")
-        if perf_config_name not in performance_model.default_configs.keys():
-            raise KeyError(f"Performance config key: {perf_config_name} not found")
-        if special_tokens is None:
-            print("\x1B[33m[Warning]\033[0m Special token(s) is required for MLM training")
-
-        # IO Paths
-        self.model_name = model_name  # Will be used to name the saved file
-        self.save_dir = save_dir  # two folders will be created - checkpoints, logs
-        self.data_path = data_path
-        self.perf_config_name = perf_config_name
-
-        # Model Setting
-        self.n_embed = n_embed
-        self.max_seq_len = max_seq_len
-        self.n_layers = n_layers
-        self.n_heads = n_heads
-        self.dropout = dropout
-
-        # Training Setting
-        self.lr = lr
-        self.mlm_prob = mlm_prob
-        self.device = device
-        self.n_epochs = n_epochs
-        self.eval_intv = eval_interval
-        self.save_intv = save_interval
-        self.special_tokens = special_tokens
-
-        self.resume_from = resume_from  # Provide checkpoint path to resume
-
-        self.train_loss = [] if train_loss is None else train_loss
-        self.val_loss = [] if val_loss is None else val_loss
-        self.epoch = epoch
-
-    @classmethod
-    def load_from_dict(cls, json_cfg):
-        init_params = signature(cls.__init__).parameters
-        filtered_cfg = {key: value for key, value in json_cfg.items() if key in init_params}
-        return cls(**filtered_cfg)
+if __name__ == '__main__':
+    print_model('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/foo.pth')

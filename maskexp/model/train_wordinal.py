@@ -1,10 +1,14 @@
+"""
+Train weighted ordinal (weighted masking mechanism - special tokens get masked more)
+"""
+
 from maskexp.model.create_dataset import load_dataset
 from maskexp.definitions import DATA_DIR, OUTPUT_DIR, SAVE_DIR, NDEBUG
 from pathlib import Path
 from maskexp.util.prepare_data import mask_perf_tokens
 from maskexp.model.tools import print_perf_seq, decode_batch_perf_logits, MAX_SEQ_LEN, ExpConfig, load_model, \
     save_checkpoint
-from maskexp.model.bert import NanoBertMLM
+from maskexp.model.bert import NanoBertMLMOrdinalLoss
 from maskexp.magenta.models.performance_rnn import performance_model
 import os
 import pickle
@@ -30,13 +34,13 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
             attention_mask = batch[1]
 
             # Mask tokens
-            inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                 special_ids=cfg.special_tokens)
+            inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
+                                                        special_ids=cfg.special_tokens)
             inputs = inputs.to(cfg.device)
             attention_mask = attention_mask.to(cfg.device)
             labels = labels.to(cfg.device)
 
-            loss, preds = model(inputs, attention_mask=attention_mask, labels=labels)
+            loss, preds = model(inputs, attention_mask=attention_mask, labels=labels, token_type_ids=mask_ids)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
@@ -60,14 +64,15 @@ def train_mlm(model, optimizer, train_dataloader, val_dataloader, cfg: ExpConfig
                     attention_mask = batch[1]
 
                     # Mask tokens
-                    inputs, labels, _ = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=cfg.mlm_prob,
-                                                         special_ids=cfg.special_tokens)
+                    inputs, labels, mask_ids = mask_perf_tokens(input_ids, perf_config=perf_config,
+                                                                mask_prob=cfg.mlm_prob,
+                                                                special_ids=cfg.special_tokens)
 
                     inputs = inputs.to(cfg.device)
                     attention_mask = attention_mask.to(cfg.device)
                     labels = labels.to(cfg.device)
 
-                    loss, logits = model(inputs, attention_mask=attention_mask, labels=labels)
+                    loss, logits = model(inputs, attention_mask=attention_mask, labels=labels, token_type_ids=mask_ids)
                     total_val_loss += loss.item()
                     val_num += 1
 
@@ -129,12 +134,12 @@ def run_mlm_train(cfg: ExpConfig = None):
     train, val, _ = load_dataset(cfg.data_path)
     config = config
 
-    model = NanoBertMLM(vocab_size=config.encoder_decoder.num_classes,
-                        n_embed=cfg.n_embed,
-                        max_seq_len=cfg.max_seq_len,
-                        n_layers=cfg.n_layers,
-                        n_heads=cfg.n_heads,
-                        dropout=cfg.dropout)
+    model = NanoBertMLMOrdinalLoss(vocab_size=config.encoder_decoder.num_classes,
+                                   n_embed=cfg.n_embed,
+                                   max_seq_len=cfg.max_seq_len,
+                                   n_layers=cfg.n_layers,
+                                   n_heads=cfg.n_heads,
+                                   dropout=cfg.dropout)
     print('n params:', count_parameters(model))
     model.to(cfg.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
@@ -147,21 +152,20 @@ def run_mlm_train(cfg: ExpConfig = None):
 
 
 def train_velocitymlm():
-    cfg = ExpConfig(model_name='velocitymlm', save_dir='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save',
-                    data_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/data/mstro_with_dyn.pt',
+    cfg = ExpConfig(model_name='ordinalmlm', save_dir='save',
+                    data_path='/kaggle/input/mstro-with-dyn/mstro_with_dyn.pt',
                     perf_config_name='performance_with_dynamics',
                     special_tokens=(note_seq.PerformanceEvent.VELOCITY,),
                     n_embed=256, max_seq_len=MAX_SEQ_LEN, n_layers=4, n_heads=4, dropout=0.1,
-                    device=torch.device('mps'), mlm_prob=0.25, n_epochs=20, lr=1e-4
+                    device=torch.device('cuda'), mlm_prob=0.25, n_epochs=20, lr=1e-4
                     )
     run_mlm_train(cfg)
 
 
 def continue_velocitymlm():
-    ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth'
+    ckpt_path = 'save/checkpoints/ordinalmlm.pth'
     cfg = ExpConfig.load_from_dict(torch.load(ckpt_path))
     cfg.resume_from = ckpt_path
-    cfg.model_name = 'weighted_mask_continue'
     run_mlm_train(cfg)
 
 
@@ -195,5 +199,5 @@ def train(name, data_path, device_str, resume_from=None, save_dir=SAVE_DIR):
 
 if __name__ == '__main__':
     train_velocitymlm()
-    continue_velocitymlm()
+    # continue_velocitymlm()
     pass

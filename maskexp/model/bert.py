@@ -237,9 +237,9 @@ def emd_loss(prediction_scores, labels, token_mask):
     """
     Compute Earth Mover's Distance loss for ordinal classification.
 
-    :param predictions:
-    :param targets:
-    :param num_classes:
+    :param prediction_scores:
+    :param labels:
+    :param token_mask:
     :return:
     """
     prediction_scores = prediction_scores[token_mask]
@@ -248,11 +248,11 @@ def emd_loss(prediction_scores, labels, token_mask):
     num_classes = prediction_scores.size(-1)
 
     # Convert labels to one-hot encoding
-    cumulative_true = F.one_hot(labels, num_classes=num_classes).cumsum(dim=1).to(torch.float32)
+    cumulative_true = F.one_hot(labels, num_classes=num_classes).to(torch.float32).cumsum(dim=1)
     cumulative_pred = prediction_scores.cumsum(dim=1)
 
     emd = torch.abs(cumulative_true - cumulative_pred).sum(dim=1)
-    return emd.mean()
+    return emd.mean() / num_classes * 2  # scale to a similar range
 
 
 class NanoBertMLMOrdinalLoss(nn.Module):

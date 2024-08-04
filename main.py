@@ -1,15 +1,25 @@
 import argparse
 
+import maskexp.model.train_raw as train_raw
 import maskexp.model.train_weighted as train_weighted
-import maskexp.model.train_ordinal as train_ordinal
+import maskexp.model.train_rordinal as train_rordinal
+import maskexp.model.train_wordinal as train_wordinal
 
 MODEL_TYPES = ['raw', 'weighted', 'raw_ordinal', 'weighted_ordinal']
 
 
 def get_train_func_by_type(type_str):
     assert type_str in MODEL_TYPES
-    if type_str == 'weighted':
+    if type_str == 'raw':
+        return train_raw.train
+    elif type_str == 'weighted':
         return train_weighted.train
+    elif type_str == 'weighted_ordinal':
+        return train_wordinal.train
+    elif type_str == 'raw_ordinal':
+        return train_rordinal.train
+
+    return train_raw.train
 
 
 def train(args):
@@ -18,6 +28,9 @@ def train(args):
     :param args:
     :return:
     """
+    train_fn = get_train_func_by_type(args.train_type)
+    train_fn(name=args.name, data_path=args.data_path, device_str=args.device,
+             resume_from=args.resume, save_dir=args.save_dir)
 
 
 def main():
@@ -64,13 +77,14 @@ def main():
     parser.add_argument(
         '--save_dir',
         type=str,
-        default=None,
+        default='save',
         help='Directory to save checkpoints. If not provided, checkpoints are not saved.'
     )
 
     args = parser.parse_args()
 
     # Display the arguments
+    print(f"Model Name: {args.name}")
     print(f"Data Path: {args.data_path}")
     print(f"Device: {args.device}")
     print(f"Train Type: {args.train_type}")
@@ -79,11 +93,7 @@ def main():
     if args.save_dir:
         print(f"Checkpoints will be saved to: {args.save_dir}")
 
-    # Your training logic here
-    # train_model(data_path=args.data_path, device=args.device, ...)
-
-    # train_velocitymlm()
-    # continue_velocitymlm()
+    train(args)
 
 
 if __name__ == '__main__':
