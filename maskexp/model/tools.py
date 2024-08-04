@@ -254,4 +254,4 @@ def bind_metric(func, **kwargs):
 
 
 if __name__ == '__main__':
-    print_model('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/foo.pth')
+    print_model('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth')

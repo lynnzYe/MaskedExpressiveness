@@ -10,6 +10,7 @@ from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.model.bert import NanoBertMLM
 from pathlib import Path
 import torch
+import json
 import random
 import functools
 import numpy as np
@@ -22,6 +23,8 @@ import time
 
 NDEBUG = False
 
+torch.manual_seed(0)
+
 
 def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.device('mps')):
     if metrics is None:
@@ -31,14 +34,16 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
     tokenizer = perf_config.encoder_decoder
     model.eval()
     total_loss = 0
+    count = 0
 
     with torch.no_grad():
-        for step, batch in enumerate(tqdm.tqdm(test_dataloader)):
+        for step, batch in enumerate(test_dataloader):
             input_ids = batch[0]
             attention_mask = batch[1]
 
             # Mask tokens
             inputs, labels, mask_type_tensor = mask_perf_tokens(input_ids, perf_config=perf_config, mask_prob=0.15,
+                                                                # normal_mask_ratio=.3,
                                                                 special_ids=(note_seq.PerformanceEvent.VELOCITY,))
             inputs = inputs.to(device)
             attention_mask = attention_mask.to(device)
@@ -46,6 +51,7 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
 
             loss, logits = model(inputs, attention_mask=attention_mask, labels=labels)
             total_loss += loss.item()
+            count += 1
 
             # Calculate and store each metric
             for metric in metrics:
@@ -53,23 +59,23 @@ def test_mlm(model, perf_config, test_dataloader, metrics=None, device=torch.dev
                 if not math.isnan(metric_value):
                     test_metrics[metric.__name__].append(metric_value)
 
-            if step == len(test_dataloader) - 1 or not NDEBUG:
-                decoded = [tokenizer.class_index_to_event(i, None) for i in inputs[0, :].tolist()]
-                print("Input ids:")
-                print_perf_seq(decoded)
-                print("Decoded:")
-                print_perf_seq(decode_batch_perf_logits(logits, tokenizer._one_hot_encoding, idx=0))
+            # if step == len(test_dataloader) - 1 or not NDEBUG:
+            #     decoded = [tokenizer.class_index_to_event(i, None) for i in inputs[0, :].tolist()]
+            #     print("Input ids:")
+            #     print_perf_seq(decoded)
+            #     print("Decoded:")
+            #     print_perf_seq(decode_batch_perf_logits(logits, tokenizer._one_hot_encoding, idx=0))
 
             if not NDEBUG:
                 break
 
-    avg_test_loss = total_loss / len(test_dataloader)
-    print(f'Test Loss: {avg_test_loss}')
+    avg_test_loss = total_loss / count
+    # print(f'Test Loss: {avg_test_loss}')
 
     # Average out metrics over all batches
     avg_test_metrics = {metric: sum(values) / len(values) for metric, values in test_metrics.items()}
-    for metric_name, avg_value in avg_test_metrics.items():
-        print(f'{metric_name}: {avg_value}')
+    # for metric_name, avg_value in avg_test_metrics.items():
+    #     print(f'{metric_name}: {avg_value}')
 
     # Save the checkpoint
     return avg_test_loss, avg_test_metrics
@@ -111,15 +117,25 @@ def run_mlm_test(test_settings: ExpConfig = None):
                                       ]
                                       )
     metrics['loss'] = avg_test_loss
-
-    torch.save(metrics,
-               f'/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/logs/{test_settings.model_name}-metrics.pth')
-    return
+    return metrics
 
 
-def test_velocitymlm(ckpt_path):
+def test_velocitymlm(ckpt_path, test_times=100):
     cfg = ExpConfig.load_from_dict(load_torch_model(ckpt_path))
-    run_mlm_test(test_settings=cfg)
+    metrics = []
+    for i in tqdm.tqdm(range(test_times)):
+        metrics.append(run_mlm_test(test_settings=cfg))
+    avg_metric = {key: 0 for key in metrics[0].keys()}
+    for e in metrics:
+        for name, val in e.items():
+            avg_metric[name] += val
+    for name in avg_metric.keys():
+        avg_metric[name] /= test_times
+
+    print(json.dumps(avg_metric, indent=4))
+    torch.save(avg_metric,
+               f'/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/logs/{cfg.model_name}-metrics.pth')
+    return avg_metric
 
 
 def pad_seq(tokens, pad_id=0, seq_len=256):
@@ -495,15 +511,15 @@ def convert_kaggle_mlm(pth):
 
 
 if __name__ == '__main__':
-    # convert_kaggle_mlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/rawmlm.pth')
+    # convert_kaggle_mlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/rawmlm+.pth')
     # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth')
-    # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
+    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
 
     # render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
     #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
     #            mask_all_velocity=True)
 
-    render_contextual_seq(
-        '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
-        ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
-        mask_all_velocity=False)
+    # render_contextual_seq(
+    #     '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+    #     ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
+    #     mask_all_velocity=False)
