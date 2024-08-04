@@ -192,7 +192,8 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
     :param token_ids:
     :param perf_config:
     :param mask_prob:
-    :param normal_mask_ratio:
+    :param normal_mask_ratio:  whether to also mask the normal tokens,
+                1.0 means it will have a same chance to be masked as special tokens
     :param special_ids:
     :return:
     """
