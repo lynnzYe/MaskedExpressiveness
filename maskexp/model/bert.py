@@ -5,6 +5,8 @@ Reference: https://github.com/StepanTita/nano-BERT
 
 import torch
 import torch.nn as nn
+from collections import defaultdict
+from typing import Any, Mapping, Optional
 import torch.nn.functional as F
 import math
 from maskexp.definitions import IGNORE_LABEL_INDEX
@@ -253,6 +255,29 @@ def emd_loss(prediction_scores, labels, token_mask):
 
     emd = torch.abs(cumulative_true - cumulative_pred).sum(dim=1)
     return emd.mean() / num_classes * 2  # scale to a similar range
+
+
+class LossWeighting():
+    def __init__(self, weights: Mapping[str, float] or None = None) -> None:
+        self.weights = weights if weights is not None else defaultdict(lambda: 1.)
+
+    def on_train_batch_end(self,
+                           trainer,
+                           outputs: Any,
+                           batch: Any,
+                           batch_idx: int) -> None:
+        print({f"hparams/{k}_weight": v for k, v in self.weights.items()})
+
+    def combine_losses(self, **losses):
+        self.update_weights(losses)
+        return sum([self.weights[key] * losses[key] for key in self.weights.keys()])
+
+    def update_weights(self, losses):
+        pass
+
+    def __str__(self):
+        params = '\n'.join(f"\t{k}: {v}" for k, v in vars(self).items())
+        return self.__class__.__name__ + "(\n" + params + "\n)"
 
 
 class NanoBertMLMOrdinalLoss(nn.Module):

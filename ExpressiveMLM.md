@@ -24,6 +24,9 @@
     - encoder: tokenize!
       - PerformanceOneHotEncoding, with velocity bins
       - convert to one hot
+- erroneous files:
+  - maestro-v3.0.0/2009/MIDI-Unprocessed_03_R1_2009_03-08_ORIG_MID--AUDIO_03_R1_2009_03_R1_2009_08_WAV.midi
+
 
 ## Performance RNN generation:
 

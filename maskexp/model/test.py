@@ -1,6 +1,7 @@
 from maskexp.model.create_dataset import load_dataset
 from maskexp.definitions import DATA_DIR, OUTPUT_DIR, SAVE_DIR, DEFAULT_MASK_EVENT, VELOCITY_MASK_EVENT
 from maskexp.util.prepare_data import mask_perf_tokens, get_attention_mask
+from sklearn.metrics import cohen_kappa_score
 from maskexp.magenta.pipelines.performance_pipeline import get_full_token_pipeline
 from maskexp.util.tokenize_midi import extract_complete_tokens
 from tools import ExpConfig, load_model, load_model_from_pth, print_perf_seq, decode_batch_perf_logits, hits_at_k, \
@@ -227,6 +228,16 @@ def mask_velocity_demo_tokens(token_seq_list, perf_config=None):
 
 
 def mlm_pred(model, perf_config, input_list, mask_list, device=torch.device('mps')):
+    """
+    Perform prediction on masked input sequence
+    [Warning] Tokens are not filtered. Raw decoded result is returned [Warning]
+    :param model:
+    :param perf_config:
+    :param input_list:
+    :param mask_list:
+    :param device:
+    :return:
+    """
     assert len(input_list) == len(mask_list) and len(input_list) > 0
     assert len(input_list[0]) == len(mask_list[0])
     assert isinstance(input_list[0], torch.Tensor)
@@ -510,11 +521,135 @@ def convert_kaggle_mlm(pth):
     torch.save(data, f'{SAVE_DIR}/checkpoints/kg_{data["model_name"]}.pth')
 
 
-if __name__ == '__main__':
-    # convert_kaggle_mlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/rawmlm+.pth')
-    # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth')
-    test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
+def contextual_pred(tokens, pth, perf_config, overlap=0.5, mask_all_velocity=False):
+    """
+    input single list all tokens from a midi, output pred midi (velocity events updated only)
+    :param tokens:
+    :param pth:
+    :param perf_config:
+    :param seq_len:
+    :param overlap:
+    :param mask_all_velocity:
+    :return:
+    """
+    overlapped_inputs, masks = prepare_contextual_model_input(tokens, perf_config, seq_len=pth['max_seq_len'],
+                                                              overlap=overlap)
+    for i, ids in enumerate(overlapped_inputs):
+        overlapped_inputs[i] = mask_all_velocity_ids(ids, perf_config) if mask_all_velocity \
+            else mask_some_velocity_ids(ids, perf_config, mask_prob=0.9)
 
+    # Model Prediction
+    in_decoded = [perf_config.encoder_decoder.class_index_to_event(i, None)
+                  for i in tokens]
+    out = run_contextual_mlm_pred(pth, overlapped_inputs, masks, overlap=overlap)
+    return in_decoded, out
+
+
+def raw_pred(tokens, pth, perf_config, mask_all_velocity=False):
+    inputs, masks = prepare_model_input(tokens, perf_config, seq_len=pth['max_seq_len'])
+    for i, ids in enumerate(inputs):
+        inputs[i] = mask_all_velocity_ids(ids, perf_config) if mask_all_velocity \
+            else mask_some_velocity_ids(ids, perf_config, mask_prob=0.9)
+
+    # Model Prediction
+    in_decoded = [perf_config.encoder_decoder.class_index_to_event(i, None)
+                  for i in tokens]
+    out = run_mlm_pred_full(pth, inputs, masks)
+    return in_decoded, out
+
+
+def eval_full_midi(midi_path, tokenizer, render_func, metric):
+    """
+    :param midi_path:
+    :param tokenizer: func convert midi to tokens
+    :param cfg: model config
+    :param render_func: function that takes a token list (will be masked) as input
+    :param metric: measure the distance between two list of tokens
+    :return:
+    """
+    tokens = tokenizer(midi_path)
+    decoded_input, result = render_func(tokens)
+    stats = metric(decoded_input, result)
+    return stats
+
+
+def full_midi_qwk(perf_inputs: list[note_seq.PerformanceEvent], perf_results: list[note_seq.PerformanceEvent],
+                  type_filter=(note_seq.PerformanceEvent.VELOCITY,)):
+    """
+    Quadratic Weighted Kappa (measures the agreement between two ratings.
+    :param perf_inputs:
+    :param perf_results:
+    :param type_filter:
+    :return:
+    """
+    assert len(perf_inputs) <= len(perf_results)
+    input_vel = []
+    output_vel = []
+    for i in range(len(perf_inputs)):
+        pin = perf_inputs[i]
+        pres = perf_results[i]
+        if pin.event_type in type_filter or pres.event_type in type_filter:
+            if pin.event_type != pres.event_type:
+                print(f"\x1B[33m[Warning]\033[0m mismatched masking type in:{pin}-out:{pres} at idx {i}")
+            input_vel.append(pin.event_value)
+            output_vel.append(pres.event_value)
+    return cohen_kappa_score(input_vel, output_vel, weights='quadratic')
+
+
+def get_context_funcs(ckpt_path, mask_all=False, overlap=0.5):
+    pth = load_torch_model(ckpt_path)
+    cfg = ExpConfig.load_from_dict(pth)
+    perf_config = performance_model.default_configs[cfg.perf_config_name]
+    tokenizer = functools.partial(extract_complete_tokens, config=perf_config, max_seq=None)
+
+    render_func = functools.partial(contextual_pred, pth=pth, perf_config=perf_config,
+                                    overlap=overlap, mask_all_velocity=mask_all)
+    metric = full_midi_qwk
+    return tokenizer, render_func, metric
+
+
+def get_raw_funcs(ckpt_path, mask_all=False):
+    pth = load_torch_model(ckpt_path)
+    cfg = ExpConfig.load_from_dict(pth)
+    perf_config = performance_model.default_configs[cfg.perf_config_name]
+    tokenizer = functools.partial(extract_complete_tokens, config=perf_config, max_seq=None)
+
+    render_func = functools.partial(raw_pred, pth=pth, perf_config=perf_config, mask_all_velocity=mask_all)
+    mse_metric = full_midi_qwk
+    return tokenizer, render_func, mse_metric
+
+
+def test_eval_full_midi(midi_path, ckpt_path, mask_all=False, overlap=0.5):
+    """
+    The root function to be modified for testing generated midi
+    :param midi_path:
+    :return:
+    """
+    funcs = get_raw_funcs(ckpt_path, mask_all=mask_all)
+    # funcs = get_context_funcs(ckpt_path, mask_all=mask_all, overlap=overlap)
+    score = eval_full_midi(midi_path, *funcs)
+    print(f"Evaluated metric is {score}")
+    return score
+
+
+if __name__ == '__main__':
+    """
+    Metric Evaluations
+    """
+    # convert_kaggle_mlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/rawordinal+.pth')
+    # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth')
+    # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
+    # test_velocitymlm('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawordinal.pth')
+
+    test_eval_full_midi(
+        '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+        '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
+        mask_all=True,
+        overlap=0.5)
+
+    """
+    Applications / Demo
+    """
     # render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
     #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth',
     #            mask_all_velocity=True)
@@ -522,4 +657,5 @@ if __name__ == '__main__':
     # render_contextual_seq(
     #     '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
     #     ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
-    #     mask_all_velocity=False)
+    #     mask_all_velocity=False,
+    #     file_stem='rawdemo')
