@@ -1,6 +1,12 @@
 """
 Reference: https://github.com/StepanTita/nano-BERT
 
+NOTICE: The implementation of attention mechanism is not optimized for speed!!
+
+TODO:
+1. Improve code efficiency
+
+
 """
 
 import torch

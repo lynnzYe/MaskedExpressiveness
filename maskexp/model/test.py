@@ -512,13 +512,13 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_all_velocity=False, ov
     overlapped_inputs, masks = prepare_contextual_model_input(tokens, perf_config, seq_len=pth['max_seq_len'],
                                                               overlap=.5)
 
-    if not mask_all_velocity:
-        masked_input = decode_overlapped_ids(overlapped_inputs, perf_config.encoder_decoder._one_hot_encoding,
-                                             overlap=overlap)
-        masked_mid = performance_events_to_pretty_midi(masked_input,
-                                                       steps_per_second=perf_config.steps_per_second,
-                                                       n_velocity_bin=perf_config.num_velocity_bins)
-        masked_mid.write(f'{OUTPUT_DIR}/{file_stem}-input.mid')
+    # if not mask_all_velocity:
+    masked_input = decode_overlapped_ids(overlapped_inputs, perf_config.encoder_decoder._one_hot_encoding,
+                                         overlap=overlap)
+    masked_mid = performance_events_to_pretty_midi(masked_input,
+                                                   steps_per_second=perf_config.steps_per_second,
+                                                   n_velocity_bin=perf_config.num_velocity_bins)
+    masked_mid.write(f'{OUTPUT_DIR}/{file_stem}-input.mid')
 
     # Model Prediction
     out = run_contextual_mlm_pred(pth, overlapped_inputs, masks, overlap=overlap)
@@ -746,14 +746,15 @@ if __name__ == '__main__':
     """
     Applications / Demo
     """
-    torch.manual_seed(5)
-    random.seed(5)
-    render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
-               ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
-               mask_all_velocity=False)
+    torch.manual_seed(4)
+    random.seed(4)
+    # render_seq('../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+    #            ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
+    #            mask_all_velocity=False)
 
     render_contextual_seq(
-        '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
+        '/Users/kurono/Desktop/testt.mid',
+        # '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid',
         ckpt_path='/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth',
-        mask_all_velocity=False,
+        mask_all_velocity=True,
         file_stem='contextdemo1')
