@@ -1,10 +1,18 @@
 """
 Reference: https://github.com/StepanTita/nano-BERT
 
+NOTICE: The implementation of attention mechanism is not optimized for speed!!
+
+TODO:
+1. Improve code efficiency
+
+
 """
 
 import torch
 import torch.nn as nn
+from collections import defaultdict
+from typing import Any, Mapping, Optional
 import torch.nn.functional as F
 import math
 from maskexp.definitions import IGNORE_LABEL_INDEX
@@ -237,9 +245,9 @@ def emd_loss(prediction_scores, labels, token_mask):
     """
     Compute Earth Mover's Distance loss for ordinal classification.
 
-    :param predictions:
-    :param targets:
-    :param num_classes:
+    :param prediction_scores:
+    :param labels:
+    :param token_mask:
     :return:
     """
     prediction_scores = prediction_scores[token_mask]
@@ -248,11 +256,34 @@ def emd_loss(prediction_scores, labels, token_mask):
     num_classes = prediction_scores.size(-1)
 
     # Convert labels to one-hot encoding
-    cumulative_true = F.one_hot(labels, num_classes=num_classes).cumsum(dim=1).to(torch.float32)
+    cumulative_true = F.one_hot(labels, num_classes=num_classes).to(torch.float32).cumsum(dim=1)
     cumulative_pred = prediction_scores.cumsum(dim=1)
 
     emd = torch.abs(cumulative_true - cumulative_pred).sum(dim=1)
-    return emd.mean()
+    return emd.mean() / num_classes * 2  # scale to a similar range
+
+
+class LossWeighting():
+    def __init__(self, weights: Mapping[str, float] or None = None) -> None:
+        self.weights = weights if weights is not None else defaultdict(lambda: 1.)
+
+    def on_train_batch_end(self,
+                           trainer,
+                           outputs: Any,
+                           batch: Any,
+                           batch_idx: int) -> None:
+        print({f"hparams/{k}_weight": v for k, v in self.weights.items()})
+
+    def combine_losses(self, **losses):
+        self.update_weights(losses)
+        return sum([self.weights[key] * losses[key] for key in self.weights.keys()])
+
+    def update_weights(self, losses):
+        pass
+
+    def __str__(self):
+        params = '\n'.join(f"\t{k}: {v}" for k, v in vars(self).items())
+        return self.__class__.__name__ + "(\n" + params + "\n)"
 
 
 class NanoBertMLMOrdinalLoss(nn.Module):
@@ -304,3 +335,42 @@ class NanoBertMLMOrdinalLoss(nn.Module):
                 loss = ce_loss(flat_prediction_scores, flat_labels)
 
         return loss, prediction_scores
+
+
+def test_bert():
+    # Test configuration
+    vocab_size = 100
+    max_seq_len = 16
+    batch_size = 8
+
+    # Initialize model
+    model = NanoBertMLM(vocab_size=vocab_size)
+
+    # Generate random input data
+    input_ids = torch.randint(low=0, high=vocab_size, size=(batch_size, max_seq_len))
+    token_type_ids = torch.zeros_like(input_ids)  # Dummy token type ids
+    attention_mask = torch.ones_like(input_ids)  # Dummy attention mask
+    labels = torch.randint(low=0, high=vocab_size, size=(batch_size, max_seq_len))
+
+    # Optionally set some labels to ignore index to simulate masked labels
+    labels[torch.rand_like(labels, dtype=torch.float) < 0.2] = IGNORE_LABEL_INDEX
+
+    # Perform a forward pass
+    model.eval()  # Set model to evaluation mode
+    with torch.no_grad():
+        loss, prediction_scores = model(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask,
+                                        labels=labels)
+
+    # Check output
+    print(f"Loss: {loss.item() if loss is not None else 'N/A'}")
+    print(f"Prediction scores shape: {prediction_scores.shape}")
+
+    # Assertions to verify correct output
+    assert prediction_scores.shape == (batch_size, max_seq_len, vocab_size), "Incorrect prediction scores shape"
+    if loss is not None:
+        assert isinstance(loss.item(), float), "Loss is not a float value"
+
+
+# Run the test function
+if __name__ == '__main__':
+    test_bert()

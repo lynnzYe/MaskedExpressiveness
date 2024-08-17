@@ -111,7 +111,7 @@ def extract_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
     return token_list
 
 
-def extract_complete_tokens(filepath, config=None, max_seq=256, min_seq=32):
+def extract_complete_tokens(filepath, config=None, max_seq=128, min_seq=32):
     """
     Extract complete tokens from one midi file
     :param filepath:
@@ -188,7 +188,7 @@ def example():
 
 
 def main():
-    example()
+    # example()
     # test_onehot()
     test_extract_tokens_from_midi(
         '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid')
