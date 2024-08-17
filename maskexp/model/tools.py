@@ -105,11 +105,15 @@ def save_checkpoint(model, optimizer, num_epoch, train_loss, val_loss, cfg: ExpC
     print(f"\x1B[34m[Info]\033[0m Checkpoint saved to {save_dir}/{name}.pth")
 
 
+def load_torch_model(path):
+    return torch.load(path, map_location=torch.device('cpu'))
+
+
 def load_model(model, optimizer=None, cpath=''):
     ckpt_path = Path(cpath)
     if not ckpt_path.exists():
         raise FileNotFoundError(f'Checkpoint file not found: {ckpt_path}')
-    ckpt = torch.load(ckpt_path, map_location=torch.device('mps'))
+    ckpt = load_torch_model(path=cpath)
     load_model_from_pth(model, optimizer, ckpt)
 
 
@@ -250,4 +254,4 @@ def bind_metric(func, **kwargs):
 
 
 if __name__ == '__main__':
-    print_model('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/foo.pth')
+    print_model('/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/velocitymlm.pth')
