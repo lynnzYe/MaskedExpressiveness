@@ -3,7 +3,7 @@
 @brief: using match file and score info, fill in the missing midi notes
 """
 
-from parser import MatchFileParser, ScoreParser
+from maskexp.util.alignment_parser import MatchFileParser, ScoreParser
 import pretty_midi
 from dataclasses import dataclass
 
@@ -95,7 +95,7 @@ def restrict_midi(midi_meta_list):
                     break
 
 
-def find_missing_midi(match_info: MatchFileParser, score_info: ScoreParser):
+def find_missing_midi(score_info: ScoreParser, match_info: MatchFileParser):
     """
     There are two types of missing notes:
     - onset-aware: within a chord matched to a performed note(s)
@@ -147,5 +147,5 @@ if __name__ == '__main__':
     scr = ScoreParser()
     scr.parse_file('score_data.txt')
 
-    midi_list = find_missing_midi(mat, scr)
+    midi_list = find_missing_midi(scr, mat)
     write_midi(midi_list, 'test.mid')

@@ -2,6 +2,7 @@ import functools
 import json
 import math
 import random
+import os
 
 import note_seq
 import numpy as np
@@ -486,7 +487,7 @@ def mask_tokens(tokens, perf_config, mask_mode):
         raise ValueError("Mode incorrect")
 
 
-def render_seq(midi_path, ckpt_path=None, mask_mode='all'):
+def render_seq(midi_path, ckpt_path=None, mask_mode='all', file_stem='demo1', output_path=None):
     """
     Predict velocity for masked midi events
         -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
@@ -513,7 +514,10 @@ def render_seq(midi_path, ckpt_path=None, mask_mode='all'):
     # Model Prediction
     out = run_mlm_pred_full(pth, inputs, masks)
     midi = performance_events_to_pretty_midi(out, perf_config.num_velocity_bins)
-    midi.write(f'{OUTPUT_DIR}/demo1.mid')
+    if output_path is None:
+        midi.write(f'{OUTPUT_DIR}/{file_stem}.mid')
+    else:
+        midi.write(os.path.join(output_path, file_stem + ".mid"))
     # syn_perfevent(out, filename='demo1.wav', n_velocity_bin=perf_config.num_velocity_bins)
     pass
 
@@ -526,7 +530,7 @@ def write_midi_chunk(chunks, config, overlap=0.5, stem='debug'):
         mid.write(OUTPUT_DIR + f'/{stem}-{i}.mid')
 
 
-def render_contextual_seq(midi_path, ckpt_path=None, mask_mode='all', overlap=.5, file_stem='demo'):
+def render_contextual_seq(midi_path, ckpt_path=None, mask_mode='all', overlap=.5, file_stem='demo', output_path=None):
     """
     Predict velocity for masked midi events
         -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
@@ -556,10 +560,7 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_mode='all', overlap=.5
 
     overlapped_inputs, masks = prepare_contextual_model_input(tokens, perf_config, seq_len=pth['max_seq_len'],
                                                               overlap=.5)
-    # Debug
-    # write_midi_chunk(overlapped_inputs, config=perf_config, overlap=overlap)
 
-    # if not mask_all_velocity:
     masked_input = decode_overlapped_ids(overlapped_inputs, perf_config.encoder_decoder._one_hot_encoding,
                                          overlap=overlap)
     masked_mid = performance_events_to_pretty_midi(masked_input,
@@ -571,7 +572,11 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_mode='all', overlap=.5
     out = run_contextual_mlm_pred(pth, overlapped_inputs, masks, overlap=overlap)
 
     midi = performance_events_to_pretty_midi(out, perf_config.num_velocity_bins)
-    midi.write(f'{OUTPUT_DIR}/{file_stem}.mid')
+
+    if output_path is None:
+        midi.write(f'{OUTPUT_DIR}/{file_stem}.mid')
+    else:
+        midi.write(os.path.join(output_path, file_stem + ".mid"))
     # syn_perfevent(out, filename=f'{file_stem}.wav', n_velocity_bin=perf_config.num_velocity_bins)
     pass
 
