@@ -203,7 +203,7 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
     if special_ids is None:
         special_ids = (note_seq.PerformanceEvent.VELOCITY,
                        # note_seq.PerformanceEvent.TIME_SHIFT
-                       # TODO: Time shift needs extra logic
+                       # TODO @Bmois: Time shift needs extra logic
                        )
 
     prob_matrix = torch.full(token_ids.shape, mask_prob)
@@ -226,7 +226,7 @@ def mask_perf_tokens(token_ids: torch.tensor, perf_config=None, mask_prob=0.15, 
     labels[~masked_indices] = IGNORE_LABEL_INDEX
     mask_type_tensor[~masked_indices] = 0
 
-    # TODO: Implement mechanism for timeshift
+    # TODO @Bmois: Implement mechanism for timeshift
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
     # default mask token is an unused midi
 

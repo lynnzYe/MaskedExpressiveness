@@ -22,13 +22,19 @@ Notice:
 
 - The MIDI alignment feature is not yet robust. Complex score may not work (e.g. with multirests, multiple parts)
 - For advanced users, you may additionally include notes other than the melody line to further hint the model.
+- Generation of sustain pedal markings is not yet supported. You may manually add them after prediction. 
 
 ### Quickstart
+Input format:
+- SPATH: ends with .xml
+- PPATH: ends with .mid
+- RPATH: ends with .mid
 
 ```shell
 python prediction.py  \
         --score_path=SPATH  \
         --performance_path=PPATH  \
+        # --ref_midi_path=RPATH \
         --output_dir=DIR  \
-        --file_stem=XXX
+        --file_stem="test"
 ```

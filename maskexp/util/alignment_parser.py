@@ -4,6 +4,7 @@
 
 fmt3x is very similar to hmm except that notes with simultaneous onsets are combined into note groups.
 """
+from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 
 
 class ScoreParser:
@@ -21,6 +22,9 @@ class ScoreParser:
             return
         elif 'Fmt3xVersion' in line:
             self.version = line.strip(': ')[-1]
+            return
+        elif '//' in line:
+            print("\x1B[34m[Info]\033[0m ", line)
             return
 
         # Parse the basic attributes
@@ -104,8 +108,10 @@ class MissingNote:
 
 class MatchFileParser:
     def __init__(self):
-        self.notes_by_id = {}  # Dictionary to store notes by onset time (ID)
+        self.matched_notes = {}  # Dictionary to store notes by onset time (ID)
+        self.extra_notes = []  # Dictionary to store extra notes (unaligned pitches)
         self.sorted_notes = []  # (note_id, score_time)
+        self.sorted_match_notes = []  # (note_id, score_time)
         self.missing_notes = []  # List to store missing notes
         self.score = ''
         self.perf = ''
@@ -134,61 +140,106 @@ class MatchFileParser:
         elif line.startswith('// fmt3x:'):
             self.fmt3x = line.split(': ')[-1]
             return
+        elif '//' in line:
+            print("\x1B[34m[Info]\033[0m ", line)
+            return
         else:
             # Split regular lines by tab and parse the attributes
             parts = line.strip().split("\t")
-            note_id = int(parts[0])
-            onset_time = float(parts[1])  # Onset time (ID)
-            offset_time = float(parts[2])  # Offset time
-            pitch = parts[3]  # Spelled pitch
-            onset_velocity = int(parts[4])  # Onset velocity
-            offset_velocity = int(parts[5])  # Offset velocity
-            channel = int(parts[6])  # Channel
-            match_status = parts[7]  # Match status
-            score_time = float(parts[8])  # Score time
-            note_id = parts[9]  # Note ID
-            error_index = int(parts[10])  # Error index
-            skip_index = parts[11]  # Skip index
-
-            # Store the note in the dictionary indexed by onset_time (ID)
-            self.notes_by_id[note_id] = {
-                'id': note_id,
-                'onset_time': onset_time,
-                'offset_time': offset_time,
-                'pitch': pitch,
-                'onset_velocity': onset_velocity,
-                'offset_velocity': offset_velocity,
-                'channel': channel,
-                'match_status': match_status,
-                'score_time': score_time,
-                'note_id': note_id,
-                'error_index': error_index,
-                'skip_index': skip_index
-            }
-            self.sorted_notes.append((note_id, score_time))
+            try:
+                note = {
+                    'id': int(parts[0]),
+                    'onset_time': float(parts[1]),  # Onset time (ID)
+                    'offset_time': float(parts[2]),  # Offset time
+                    'pitch': parts[3],  # Spelled pitch
+                    'onset_velocity': int(parts[4]),  # Onset velocity
+                    'offset_velocity': int(parts[5]),  # Offset velocity
+                    'channel': int(parts[6]),  # Channel
+                    'match_status': parts[7],  # Match status
+                    'score_time': float(parts[8]),  # Score time
+                    'note_id': parts[9],  # Note ID
+                    'error_index': int(parts[10]),  # Error index
+                    'skip_index': parts[11],  # Skip index
+                }
+                if parts[9] == '*':
+                    self.extra_notes.append(note)
+                else:
+                    # Store the note in the dictionary indexed by onset_time (ID)
+                    self.matched_notes[parts[9]] = note
+                    self.sorted_match_notes.append(note)
+                self.sorted_notes.append((note['note_id'], note['score_time']))
+            except ValueError as e:
+                print("A Match File is expected. Format error.")
 
     def parse_file(self, filepath):
         with open(filepath, "r") as file:
             for line in file:
                 self.parse_line(line)
 
+    def count_aligned_midi(self):
+        if not self.matched_notes:
+            print("\x1B[33m[Warning]\033[0m No match file provided")
+            return 0.0
+        matched_count = 0
+        for note in self.matched_notes.values():
+            if note['note_id'] != '*':
+                matched_count += 1
+        return matched_count
+
     def get_note_by_onset_time(self, onset_time):
         """Retrieve a note by its onset time (ID)."""
-        return self.notes_by_id.get(onset_time, None)
+        return self.matched_notes.get(onset_time, None)
 
     def get_attr_by_id(self, note_id, attr):
-        if note_id not in self.notes_by_id.keys():
+        if note_id not in self.matched_notes.keys():
             return None
-        if attr not in self.notes_by_id[note_id].keys():
+        if attr not in self.matched_notes[note_id].keys():
             raise KeyError("Matcher found unknown key")
-        return self.notes_by_id[note_id].get(attr, None)
+        return self.matched_notes[note_id].get(attr, None)
 
     def get_onset_time_by_id(self, note_id):
-        return self.notes_by_id[note_id]['onset_time']
+        return self.matched_notes[note_id]['onset_time']
 
     def get_missing_notes(self):
         """Retrieve all missing notes."""
         return self.missing_notes
+
+
+class SprParser:
+    def __init__(self):
+        self.notes_by_id = {}  # Dictionary to store notes by onset time (ID)
+        self.sorted_notes = []  # (raw id, onset time)
+        self.version = ''
+
+    def parse_file(self, filepath):
+        with open(filepath, "r") as file:
+            for line in file:
+                self.parse_line(line)
+
+    def parse_line(self, line):
+        # Check if the line starts with //Missing
+        line = line.replace('\n', '')
+        if line.startswith('//Version'):
+            self.version = line.split(': ')[-1]
+            return
+        elif '//' in line or line.startswith('#'):
+            print("\x1B[34m[Info]\033[0m ", line)
+            return
+        else:
+            # Split regular lines by tab and parse the attributes
+            parts = line.strip().split("\t")
+            note = {
+                'id': int(parts[0]),
+                'onset_time': float(parts[1]),  # Onset time (ID)
+                'offset_time': float(parts[2]),  # Offset time
+                'pitch': parts[3],  # Spelled pitch
+                'onset_velocity': int(parts[4]),  # Onset velocity
+                'offset_velocity': int(parts[5]),  # Offset velocity
+                'channel': int(parts[6]),  # Channel
+            }
+            # Store the note in the dictionary indexed by onset_time (ID)
+            self.notes_by_id[parts[0]] = note
+            self.sorted_notes.append(note)  # Assumes already sorted
 
 
 if __name__ == '__main__':
@@ -203,7 +254,7 @@ if __name__ == '__main__':
 
     parser = MatchFileParser()
     parser.parse_file("match_data.txt")
-    print(json.dumps(parser.notes_by_id, indent=4))
+    print(json.dumps(parser.matched_notes, indent=4))
     print('===================')
 
     # note = parser.get_note_by_id("P1-1-2")
