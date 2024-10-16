@@ -2,6 +2,9 @@ import os.path
 import shutil
 from pathlib import Path
 import argparse
+
+from pandas.io.pytables import performance_doc
+
 from maskexp.test.test import render_seq
 from maskexp.util.alignment_parser import ScoreParser, MatchFileParser, SprParser
 from maskexp.util.midifier import find_missing_midi, write_coop_midi
@@ -21,14 +24,19 @@ def midify(fmt3x_file, match_file, spr_file, filestem='perf_pred'):
     match_info = MatchFileParser()
     match_info.parse_file(match_file)
 
-    success_rate = match_info.count_aligned_midi()
-    # TODO @Bmois ...
-
     if spr_file is not None:
         spr_info = SprParser()
         spr_info.parse_file(spr_file)
+        success_rate = match_info.count_aligned_midi() / len(spr_info.sorted_notes)
+        print("Alignment success rate:", success_rate)
     else:
         spr_info = None
+        success_rate = match_info.count_aligned_midi() / len(match_info.sorted_notes)
+        print("Alignment success rate:", success_rate)
+        if success_rate < 0.8:
+            print("\x1B[33m[Warning]\033[0m Poorly Aligned. "
+                  "You may want to try MIDI-MIDI alignment instead of score alignment. "
+                  "Convert the xml to MIDI using Musescore, for example")
 
     med_midi_list, midi_list = find_missing_midi(score_info, match_info, spr_info)
     write_coop_midi(med_midi_list, midi_list, os.path.join(OUTPUT_DIR, filestem + '.mid'))
@@ -145,12 +153,15 @@ def test_run_alignment():
 
 
 def test_main():
+    # score_path = '/Users/kurono/Desktop/Chop.xml'
     score_path = '/Users/kurono/Desktop/schu.xml'
+    # performance_path = '/Users/kurono/Desktop/Chop.mid'
     performance_path = '/Users/kurono/Desktop/schu.mid'
     ref_midi_path = '/Users/kurono/Desktop/schu_score.mid'
     output_dir = '/Users/kurono/Desktop'
     file_stem = 'test_main'
 
+    # pred_performance(performance_path, score_path, None, output_dir, file_stem)
     pred_performance(performance_path, None, ref_midi_path, output_dir, file_stem)
 
 

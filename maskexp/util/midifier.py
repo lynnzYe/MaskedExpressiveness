@@ -16,7 +16,7 @@ from dataclasses import dataclass
 ONSET_DEVIANCE = 0.001
 NOTE_TO_OFFSET = {
     'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
-    'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8,
+    'E': 4, 'Fb': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8,
     'A': 9, 'A#': 10, 'Bb': 10, 'B': 11, 'Cb': 11
 }
 ma_alpha = 0.01
@@ -125,36 +125,45 @@ def create_midi(pitch, onset, offset, velocity):
 @dataclass
 class MIDINote:
     pitch: int
-    onset: float
-    offset: float
+    start: float
+    end: float
     velocity: int
 
     def __post_init__(self):
-        assert self.offset > self.onset
+        assert self.end > self.start
         assert 0 <= self.velocity < 128
 
 
 def restrict_midi(midi_meta_list):
     # sort midi meta list by onset first
-    midi_meta_list = sorted(midi_meta_list, key=lambda mid: mid.onset)
+    midi_meta_list = sorted(midi_meta_list, key=lambda mid: mid.start)
+    clean_midi_list = []
+    delete_indices = []
     for idx in reversed(range(len(midi_meta_list) - 1)):
         if idx == 0:
             break
         idx_search = idx
+        if idx in delete_indices or midi_meta_list[idx].start == midi_meta_list[idx].end:
+            continue
         while idx_search > 0:
             idx_search -= 1
             if midi_meta_list[idx_search].pitch == midi_meta_list[idx].pitch:
-                if midi_meta_list[idx_search].offset >= midi_meta_list[idx].onset:
-                    if abs(midi_meta_list[idx_search].onset - midi_meta_list[idx].onset) <= 0.0001:
+                if midi_meta_list[idx_search].end >= midi_meta_list[idx].start:
+                    if abs(midi_meta_list[idx_search].start - midi_meta_list[idx].start) <= ONSET_DEVIANCE:
                         # print("\x1B[33m[Warning]\033[0m Two simultaneous note-on with the same pitch! Delete one")
                         # print('Pitch:', midi_meta_list[idx])
-                        del midi_meta_list[idx_search]
+                        delete_indices.append(idx_search if midi_meta_list[idx_search].end < midi_meta_list[idx].end \
+                                                  else idx)
+                        continue
                     # Overlapped note found. Trim previous note.
-                    midi_meta_list[idx_search].offset = max(midi_meta_list[idx].onset - 0.01,
-                                                            midi_meta_list[idx_search].onset + 0.0001)
-                    assert midi_meta_list[idx_search].onset < midi_meta_list[idx_search].offset
+                    midi_meta_list[idx_search].end = max(midi_meta_list[idx].start - 0.01,
+                                                         midi_meta_list[idx_search].start + 0.0001)
+                    assert midi_meta_list[idx_search].start < midi_meta_list[idx_search].end
                     # minus 10ms to prevent normalization error
                     break
+        if idx not in delete_indices:
+            clean_midi_list.append(midi_meta_list[idx])
+    return clean_midi_list
 
 
 def get_spr_midi_time(spr_info: SprParser, idx: str):
@@ -184,21 +193,22 @@ def midify_score_align(score_info: ScoreParser, match_info: MatchFileParser):
                      note['offset_time'],
                      note['onset_velocity'])
         )
+    restrict_midi(med_midi_meta_list)
 
     for note in match_info.missing_notes:
         missing_id = note[0]
         st = score_info.get_attr_by_id(missing_id, 'score_time')
         onset, offset = infer_aligned_note_time(st, match_info)
         pt = pitchname_to_midi(score_info.get_attr_by_id(missing_id, 'pitch'))
-        midi_meta_list.append(MIDINote(pitch=pt, onset=onset, offset=offset, velocity=1))
+        midi_meta_list.append(MIDINote(pitch=pt, start=onset, end=offset, velocity=1))
     restrict_midi(midi_meta_list)
 
     med_midi_list = []
     midi_list = []
     for mid in med_midi_meta_list:
-        med_midi_list.append(create_midi(mid.pitch, mid.onset, mid.offset, mid.velocity))
+        med_midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
     for i, mid in enumerate(midi_meta_list):
-        midi_list.append(create_midi(mid.pitch, mid.onset, mid.offset, mid.velocity))
+        midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
     return med_midi_list, midi_list
 
 
@@ -278,15 +288,15 @@ def midify_midi_align(spr_info: SprParser, match_info: MatchFileParser):
         onset, offset = infer_aligned_midi_time(note['onset_time'], note['offset_time'], match_info, spr_info)
         if onset == offset:
             continue  # Skip inaudible notes
-        midi_meta_list.append(MIDINote(pitch=pitchname_to_midi(note['pitch']), onset=onset, offset=offset, velocity=1))
+        midi_meta_list.append(MIDINote(pitch=pitchname_to_midi(note['pitch']), start=onset, end=offset, velocity=1))
     restrict_midi(midi_meta_list)
 
     med_midi_list = []
     midi_list = []
     for mid in med_midi_meta_list:
-        med_midi_list.append(create_midi(mid.pitch, mid.onset, mid.offset, mid.velocity))
+        med_midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
     for i, mid in enumerate(midi_meta_list):
-        midi_list.append(create_midi(mid.pitch, mid.onset, mid.offset, mid.velocity))
+        midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
     return med_midi_list, midi_list
 
 

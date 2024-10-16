@@ -4,6 +4,7 @@ from maskexp.magenta.pipelines import performance_pipeline, note_sequence_pipeli
 from maskexp.magenta.contrib import training as contrib_training
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.util.play_midi import syn_perfevent, note_sequence_to_performance_events
+from maskexp.util.midifier import restrict_midi
 import numpy as np
 
 
@@ -111,6 +112,28 @@ def extract_tokens_from_midi(filepath, config=None, max_seq=256, min_seq=32):
     return token_list
 
 
+def midi_cleanup(filepath, out_path):
+    """
+    Sometimes multiple note-ons and note-offs of a single pitch overlap. We don't want that overlap.
+    :param filepath:
+    :return:
+    """
+    data = pm.PrettyMIDI(filepath)
+    all_notes = []
+    for instrument in data.instruments:
+        all_notes.extend(instrument.notes)
+    all_notes.sort(key=lambda note: note.start)
+    restrict_midi(all_notes)
+
+    merged_instrument = pm.Instrument(program=0)
+    merged_instrument.notes = all_notes
+    merged_midi = pm.PrettyMIDI()
+    merged_midi.instruments.append(merged_instrument)
+
+    # Overwrite the original
+    merged_midi.write(out_path)
+
+
 def extract_complete_tokens(filepath, config=None, max_seq=128, min_seq=32):
     """
     Extract complete tokens from one midi file
@@ -190,9 +213,10 @@ def example():
 def main():
     # example()
     # test_onehot()
-    test_extract_tokens_from_midi(
-        '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid')
-
+    # test_extract_tokens_from_midi(
+    #     '../../data/ATEPP-1.2-cleaned/Sergei_Rachmaninoff/Variations_on_a_Theme_of_Chopin/Theme/00077.mid')
+    midi_cleanup('/Users/kurono/Desktop/schu_score.mid',
+                 '/Users/kurono/Desktop/tests.mid')
     pass
 
 

@@ -19,7 +19,7 @@ from maskexp.model.bert import NanoBertMLM
 from maskexp.model.create_dataset import load_dataset
 from maskexp.util.play_midi import performance_events_to_pretty_midi
 from maskexp.util.prepare_data import mask_perf_tokens, get_attention_mask
-from maskexp.util.tokenize_midi import extract_complete_tokens
+from maskexp.util.tokenize_midi import extract_complete_tokens, midi_cleanup
 from maskexp.model.tools import ExpConfig, load_model, load_model_from_pth, print_perf_seq, hits_at_k, \
     accuracy_within_n, bind_metric, logits_to_id, load_torch_model
 
@@ -492,7 +492,7 @@ def render_seq(midi_path, ckpt_path=None, mask_mode='all', file_stem='demo1', ou
     Predict velocity for masked midi events
         -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
         -> generation by the simplest strategy -> shift by max-seq-len, no window overlap
-    :param midi_path:
+    :param midi_path: this might be overwritten!!
     :param ckpt_path: path to the checkpoint (which should also contain the model settings, losses etc.)
     :param mask_mode:
     :return:
@@ -502,7 +502,10 @@ def render_seq(midi_path, ckpt_path=None, mask_mode='all', file_stem='demo1', ou
     pth = load_torch_model(ckpt_path)
     cfg = ExpConfig.load_from_dict(pth)
     perf_config = performance_model.default_configs[cfg.perf_config_name]
-    tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
+
+    clean_midi_path = os.path.join(OUTPUT_DIR, 'tmp_' + os.path.basename(midi_path))
+    midi_cleanup(midi_path, clean_midi_path)
+    tokens = extract_complete_tokens(clean_midi_path, perf_config, max_seq=None)
 
     tokens = mask_tokens(tokens, perf_config=perf_config, mask_mode=mask_mode)
     if not NDEBUG:

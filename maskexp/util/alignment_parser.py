@@ -182,7 +182,7 @@ class MatchFileParser:
             return 0.0
         matched_count = 0
         for note in self.matched_notes.values():
-            if note['note_id'] != '*':
+            if note['note_id'] != '*' and note['error_index'] == 0:
                 matched_count += 1
         return matched_count
 
