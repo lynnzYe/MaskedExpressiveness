@@ -4,8 +4,10 @@
 """
 from logging import warning
 from nis import match
+import random
 
 from bokeh.sampledata.sprint import sprint
+from keras.src.legacy.preprocessing.image import random_shift
 from scipy.stats import alpha
 from tensorflow.python.framework.errors_impl import OutOfRangeError
 
@@ -44,7 +46,8 @@ def _infer_time(target_y, onset1, stime1, onset2, stime2):
     return onset, offset
 
 
-def infer_aligned_midi_time(score_onset_time, score_offset_time, match_info: MatchFileParser, spr_info: SprParser):
+def infer_aligned_midi_time(score_onset_time, score_offset_time, match_info: MatchFileParser, spr_info: SprParser,
+                            random_shift=False):
     """
     Return the onset and offset time of a given note,
 
@@ -52,7 +55,7 @@ def infer_aligned_midi_time(score_onset_time, score_offset_time, match_info: Mat
     :param score_offset_time: similar to above
     :param match_info:
     :param spr_info:
-    :param moving_avg: for tempo smoothing
+    :param random_shift: if enabled, will shift the onset and offset by several milliseconds
     :return:
     """
     # First, we need to find the closest performed onset to the score MIDI note
@@ -81,7 +84,11 @@ def infer_aligned_midi_time(score_onset_time, score_offset_time, match_info: Mat
                                     match_info.sorted_match_notes[idx1]['onset_time'],
                                     match_info.sorted_match_notes[idx2]['onset_time'])
     # print(a_os, b_os, idx1, idx2)
-    return score_onset_time * a_os + b_os, score_offset_time * a_os + b_os
+    if random_shift:
+        shift = random.uniform(-ONSET_DEVIANCE * 10, ONSET_DEVIANCE * 10)
+    else:
+        shift = 0
+    return score_onset_time * a_os + b_os + shift, score_offset_time * a_os + b_os + shift
 
 
 def infer_aligned_note_time(note_stime, match_info: MatchFileParser):
@@ -133,6 +140,9 @@ class MIDINote:
         assert self.end > self.start
         assert 0 <= self.velocity < 128
 
+    def __hash__(self):
+        return hash((self.pitch, self.start, self.end, self.velocity))
+
 
 def restrict_midi(midi_meta_list):
     # sort midi meta list by onset first
@@ -166,6 +176,24 @@ def restrict_midi(midi_meta_list):
     return clean_midi_list
 
 
+def remove_overlapped_score_midi(perf, score):
+    """
+    Given notes in performance, remove notes that overlaps with the performed MIDI in score MIDI
+    :param perf:
+    :param score:
+    :return: clean score MIDI
+    """
+    flawed_score_midi = []
+    for j, s in enumerate(score):
+        for i, p in enumerate(perf):
+            if p.pitch == s.pitch:
+                if s.start <= p.start <= s.end or p.start <= s.start <= p.end:
+                    flawed_score_midi.append(s)
+                    break
+
+    return list(set(score) - set(flawed_score_midi))
+
+
 def get_spr_midi_time(spr_info: SprParser, idx: str):
     return spr_info.notes_by_id[idx]['onset_time'], spr_info.notes_by_id[idx]['offset_time']
 
@@ -179,35 +207,36 @@ def midify_score_align(score_info: ScoreParser, match_info: MatchFileParser):
     :param score_info:
     :return:
     """
-    med_midi_meta_list = []
-    midi_meta_list = []
+    perf_midi_meta_list = []
+    score_midi_meta_list = []
     # Fill in performed MIDI events
     for note in match_info.matched_notes.values():
         if note['offset_time'] == note['onset_time']:
             continue  # Skip inaudible notes
         assert note['offset_time'] > note['onset_time']
 
-        med_midi_meta_list.append(
+        perf_midi_meta_list.append(
             MIDINote(pitchname_to_midi(note['pitch']),
                      note['onset_time'],
                      note['offset_time'],
                      note['onset_velocity'])
         )
-    restrict_midi(med_midi_meta_list)
+    restrict_midi(perf_midi_meta_list)
+    score_midi_meta_list = remove_overlapped_score_midi(perf_midi_meta_list, score_midi_meta_list)
 
     for note in match_info.missing_notes:
         missing_id = note[0]
         st = score_info.get_attr_by_id(missing_id, 'score_time')
         onset, offset = infer_aligned_note_time(st, match_info)
         pt = pitchname_to_midi(score_info.get_attr_by_id(missing_id, 'pitch'))
-        midi_meta_list.append(MIDINote(pitch=pt, start=onset, end=offset, velocity=1))
-    restrict_midi(midi_meta_list)
+        score_midi_meta_list.append(MIDINote(pitch=pt, start=onset, end=offset, velocity=1))
+    restrict_midi(score_midi_meta_list)
 
     med_midi_list = []
     midi_list = []
-    for mid in med_midi_meta_list:
+    for mid in perf_midi_meta_list:
         med_midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
-    for i, mid in enumerate(midi_meta_list):
+    for i, mid in enumerate(score_midi_meta_list):
         midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
     return med_midi_list, midi_list
 
@@ -262,8 +291,8 @@ def midify_midi_align(spr_info: SprParser, match_info: MatchFileParser):
     :param match_info:
     :return:
     """
-    med_midi_meta_list = []
-    midi_meta_list = []
+    perf_midi_meta_list = []
+    score_midi_meta_list = []
     assert len(spr_info.notes_by_id) >= len(match_info.matched_notes)
 
     # Each Spr id map to exactly one score id, in order
@@ -272,7 +301,7 @@ def midify_midi_align(spr_info: SprParser, match_info: MatchFileParser):
         if note['offset_time'] == note['onset_time']:
             continue  # Skip inaudible notes
         assert note['offset_time'] > note['onset_time']
-        med_midi_meta_list.append(
+        perf_midi_meta_list.append(
             MIDINote(pitchname_to_midi(note['pitch']),
                      note['onset_time'],
                      note['offset_time'],
@@ -285,17 +314,20 @@ def midify_midi_align(spr_info: SprParser, match_info: MatchFileParser):
 
     for note in match_info.extra_notes:
         # because we align score MIDI to performed MIDI, extra notes are actually missing score notes.
-        onset, offset = infer_aligned_midi_time(note['onset_time'], note['offset_time'], match_info, spr_info)
+        onset, offset = infer_aligned_midi_time(note['onset_time'], note['offset_time'], match_info, spr_info,
+                                                random_shift=False)
         if onset == offset:
             continue  # Skip inaudible notes
-        midi_meta_list.append(MIDINote(pitch=pitchname_to_midi(note['pitch']), start=onset, end=offset, velocity=1))
-    restrict_midi(midi_meta_list)
+        score_midi_meta_list.append(
+            MIDINote(pitch=pitchname_to_midi(note['pitch']), start=onset, end=offset, velocity=1))
+    restrict_midi(score_midi_meta_list)
+    score_midi_meta_list = remove_overlapped_score_midi(perf_midi_meta_list, score_midi_meta_list)
 
     med_midi_list = []
     midi_list = []
-    for mid in med_midi_meta_list:
+    for mid in perf_midi_meta_list:
         med_midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
-    for i, mid in enumerate(midi_meta_list):
+    for i, mid in enumerate(score_midi_meta_list):
         midi_list.append(create_midi(mid.pitch, mid.start, mid.end, mid.velocity))
     return med_midi_list, midi_list
 

@@ -5,7 +5,7 @@ import argparse
 
 from pandas.io.pytables import performance_doc
 
-from maskexp.test.test import render_seq
+from maskexp.test.test import render_seq, render_contextual_seq
 from maskexp.util.alignment_parser import ScoreParser, MatchFileParser, SprParser
 from maskexp.util.midifier import find_missing_midi, write_coop_midi
 from maskexp.definitions import OUTPUT_DIR, SAVE_DIR
@@ -117,7 +117,8 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
 
     midi_path = os.path.join(OUTPUT_DIR, file_stem + '.mid')
     ckpt_path = os.path.join(SAVE_DIR, 'checkpoints', 'kg_rawmlm.pth')
-    render_seq(midi_path, ckpt_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
+    render_contextual_seq(midi_path, ckpt_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
+    # render_seq(midi_path, ckpt_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
 
 
 def test_run_alignment():

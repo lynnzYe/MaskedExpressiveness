@@ -26,15 +26,17 @@ Notice:
 
 ### Quickstart
 Input format:
-- SPATH: ends with .xml
-- PPATH: ends with .mid
-- RPATH: ends with .mid
+- `SPATH`: ends with .xml **or** `RPATH`: ends with .mid
+- `PPATH`: ends with .mid
 
 ```shell
 python prediction.py  \
         --score_path=SPATH  \
-        --performance_path=PPATH  \
         # --ref_midi_path=RPATH \
+        --performance_path=PPATH  \
         --output_dir=DIR  \
         --file_stem="test"
 ```
+
+### Known Problems:
+- Notes with simultaneous onsets tend to get the same predicted velocity. 
