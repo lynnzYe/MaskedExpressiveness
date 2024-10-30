@@ -12,7 +12,7 @@ from sklearn.metrics import cohen_kappa_score
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 
-from maskexp.util.play_midi import syn_perfevent
+from maskexp.util.play_midi import syn_perfevent, decode_output_ids, write_ids_to_midi, write_token_to_midi
 from maskexp.definitions import OUTPUT_DIR, SAVE_DIR, VELOCITY_MASK_EVENT, NDEBUG
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.model.bert import NanoBertMLM
@@ -282,12 +282,12 @@ def step_contextual_velocity_mlm_pred(model, input_ids, mask, start_index=0, num
     :param overlap:
     :param device:
     :param replace_id:
-    :return: updated input_ids, and a bool status whether all are replaced
+    :return: updated input_ids, and a bool status whether all are replaced (updated)
     """
     assert len(input_ids) == len(mask)
     if num_to_replace == 0:
         print("\x1B[33m[Warning]\033[0m no replacement asked. returning")
-        return input_ids, False
+        return input_ids.de, False
     model.eval()
 
     with torch.no_grad():
@@ -337,20 +337,6 @@ def run_mlm_pred_full(pth, inputs, masks):
 
 def get_overlap_length(seq_len, overlap):
     return seq_len - int(seq_len * overlap)
-
-
-def decode_output_ids(out_ids, decoder):
-    """
-    Decode class id into performance events
-    :param out_ids:
-    :param decoder:
-    :return:
-    """
-    if isinstance(out_ids, torch.Tensor):
-        return [decoder.decode_event(e.item()) for e in out_ids]
-    else:
-        assert isinstance(out_ids, list)
-        return [decoder.decode_event(e) for e in out_ids]
 
 
 def decode_overlapped_ids(out_id_list, decoder, overlap=0.5):
@@ -411,6 +397,8 @@ def run_contextual_mlm_pred(pth, inputs, masks, overlap=0.5, step_percent=0.1):
     while True:
         round_status = []
         for i_input, (input_ids, mask) in enumerate(zip(inputs, masks)):
+            # TODO @Bmois remove debug code
+            test_ids = input_ids.clone()
             pred_ids, status = step_contextual_velocity_mlm_pred(model, input_ids, mask,
                                                                  start_index=0 if i_input == 0 else overlap_length,
                                                                  overlap=overlap,
@@ -424,6 +412,12 @@ def run_contextual_mlm_pred(pth, inputs, masks, overlap=0.5, step_percent=0.1):
             if i_input < len(inputs) - 1:
                 # update the next input ids % percent with updated current input_ids
                 inputs[i_input + 1][:overlap_length] = pred_ids[overlap_length:]
+
+            # TODO @Bmois Debug
+            write_ids_to_midi(inputs[i_input], perf_config)
+            # test_tok = decode_overlapped_ids(inputs, decoder, overlap)
+            # write_token_to_midi(test_tok, perf_config)
+
         if all(x == False for x in round_status):
             break
 
@@ -506,7 +500,6 @@ def render_seq(midi_path, ckpt_path=None, mask_mode='all', file_stem='demo1', ou
     clean_midi_path = os.path.join(OUTPUT_DIR, 'tmp_' + os.path.basename(midi_path))
     midi_cleanup(midi_path, clean_midi_path)
     tokens = extract_complete_tokens(clean_midi_path, perf_config, max_seq=None)
-
     tokens = mask_tokens(tokens, perf_config=perf_config, mask_mode=mask_mode)
     if not NDEBUG:
         masked_perf = decode_output_ids(tokens, perf_config.encoder_decoder._one_hot_encoding)
@@ -538,11 +531,12 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_mode='all', overlap=.5
     Predict velocity for masked midi events
         -> those note-on velocity events to be predicted should use velocity = 1 -> converted to 4-0
         -> generation by the simplest strategy -> shift by max-seq-len, no window overlap
-    :param file_stem:
     :param midi_path:
+    :param mask_mode:
     :param ckpt_path: path to the checkpoint (which should also contain the model settings, losses etc.)
-    :param mask_all_velocity:
     :param overlap:
+    :param file_stem:
+    :param output_path:
     :return:
     """
     if ckpt_path is None:
@@ -551,25 +545,16 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_mode='all', overlap=.5
     cfg = ExpConfig.load_from_dict(pth)
     perf_config = performance_model.default_configs[cfg.perf_config_name]
     tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
-
-    if not NDEBUG:
-        tokenized_midi = decode_output_ids(tokens, perf_config.encoder_decoder._one_hot_encoding)
-        tokenized_midi = performance_events_to_pretty_midi(tokenized_midi,
-                                                           steps_per_second=perf_config.steps_per_second,
-                                                           n_velocity_bin=perf_config.num_velocity_bins)
-        tokenized_midi.write(OUTPUT_DIR + "/tokenized_mid.mid")
-
     tokens = mask_tokens(tokens, perf_config=perf_config, mask_mode=mask_mode)
-
     overlapped_inputs, masks = prepare_contextual_model_input(tokens, perf_config, seq_len=pth['max_seq_len'],
                                                               overlap=.5)
-
-    masked_input = decode_overlapped_ids(overlapped_inputs, perf_config.encoder_decoder._one_hot_encoding,
-                                         overlap=overlap)
-    masked_mid = performance_events_to_pretty_midi(masked_input,
-                                                   steps_per_second=perf_config.steps_per_second,
-                                                   n_velocity_bin=perf_config.num_velocity_bins)
-    masked_mid.write(f'{OUTPUT_DIR}/{file_stem}-input.mid')
+    if not NDEBUG:
+        masked_input = decode_overlapped_ids(overlapped_inputs, perf_config.encoder_decoder._one_hot_encoding,
+                                             overlap=overlap)
+        masked_mid = performance_events_to_pretty_midi(masked_input,
+                                                       steps_per_second=perf_config.steps_per_second,
+                                                       n_velocity_bin=perf_config.num_velocity_bins)
+        masked_mid.write(f'{OUTPUT_DIR}/{file_stem}-input.mid')
 
     # Model Prediction
     out = run_contextual_mlm_pred(pth, overlapped_inputs, masks, overlap=overlap)
@@ -802,16 +787,17 @@ if __name__ == '__main__':
     Applications / Demo
     """
     seed = 0
-    midi_path = '/Users/kurono/Desktop/AlignmentTool/test.mid'
+    midi_path = '/Users/kurono/Desktop/test_main.mid'
     ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth'
-    mask_mode = 'min'
+    mask_mode = 'all'
 
     torch.manual_seed(0)
     random.seed(0)
 
-    render_seq(midi_path=midi_path,
-               ckpt_path=ckpt_path,
-               mask_mode=mask_mode)
+    # render_seq(midi_path=midi_path,
+    #            ckpt_path=ckpt_path,
+    #            mask_mode=mask_mode,
+    #            file_stem='demo1')
 
     render_contextual_seq(
         midi_path=midi_path,

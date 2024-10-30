@@ -1,6 +1,9 @@
+from tokenize import tokenize
+
 import fluidsynth
 import pretty_midi
 import note_seq
+import torch
 from note_seq import PerformanceEvent
 import numpy as np
 from scipy.io.wavfile import write as write_wav
@@ -15,6 +18,40 @@ def note_sequence_to_performance_events(note_sequence, steps_per_quarter=100):
                                                                               max_shift_steps=100)
 
     return perfs
+
+
+def decode_output_ids(out_ids, decoder):
+    """
+    Decode class id into performance events
+    :param out_ids:
+    :param decoder:
+    :return:
+    """
+    if isinstance(out_ids, torch.Tensor):
+        return [decoder.decode_event(e.item()) for e in out_ids]
+    else:
+        assert isinstance(out_ids, list)
+        return [decoder.decode_event(e) for e in out_ids]
+
+
+def write_ids_to_midi(tokens: torch.Tensor, perf_config, output_dir=None, fstem=None):
+    """
+    Convert ids to MIDI, (e.g. [339, 2, 42] -> MIDI file)
+    :param tokens:
+    :param perf_config:
+    :return:
+    """
+    tokenized_midi = decode_output_ids(tokens, perf_config.encoder_decoder._one_hot_encoding)
+    write_token_to_midi(tokenized_midi, perf_config)
+
+
+def write_token_to_midi(tokens, perf_config, output_dir=None, fstem=None):
+    midi = performance_events_to_pretty_midi(tokens, perf_config.encoder_decoder._one_hot_encoding)
+    if output_dir is None:
+        output_dir = OUTPUT_DIR
+    if fstem is None:
+        fstem = 'ids_to_mid'
+    midi.write(OUTPUT_DIR + f"/{fstem}.mid")
 
 
 def performance_events_to_pretty_midi(events: list[PerformanceEvent], steps_per_second=100, n_velocity_bin=32,

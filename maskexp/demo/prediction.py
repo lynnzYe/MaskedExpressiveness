@@ -181,10 +181,18 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    pred_performance(args.score_path, args.performance_path, args.output_dir, args.file_stem)
+    pred_performance(args.performance_path, args.score_path, args.ref_midi_path, args.output_dir, args.file_stem)
 
 
 if __name__ == '__main__':
+    # Sometimes you may notice the model predicting the same velocity for continuous notes.
+    # This is because the note_seq lib uses one velocity token to describe several notes with the same velocity.
+    # (which is not ideal in our case)
+    # To solve this, you need to manually modify line 379 in note_seq/performance_lib.py
+    # - if not is_offset and velocity_bin != current_velocity_bin:
+    # + if not is_offset:
+    # TODO @Bmois move this to Readme.md
+
     # test_run_alignment()
     test_main()
     # main()
