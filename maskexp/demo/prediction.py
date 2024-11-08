@@ -1,5 +1,6 @@
 import os
 import shutil
+from multiprocessing.managers import Value
 from pathlib import Path
 import argparse
 
@@ -88,7 +89,8 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
     :param file_stem:
     :return:
     """
-    assert (score_path is None) != (score_midi_path is None)
+    if (score_path is None) != (score_midi_path is None):
+        raise ValueError("score_path or ref_midi_path should be passed in, but not both!")
     if not os.path.exists('AlignmentTool/Programs'):
         build_alignment_tool()
     Path('AlignmentTool/data').mkdir(exist_ok=True)
@@ -171,7 +173,7 @@ def main():
         description='Predict expressive performance by conditioning on performed parts of the score'
     )
     # Adding arguments
-    parser.add_argument('--score_path', type=str, required=True, help="Path to the score file")
+    parser.add_argument('--score_path', type=str, required=False, help="Path to the score file")
     parser.add_argument('--performance_path', type=str, required=False, help="Path to the performance file")
     parser.add_argument('--ref_midi_path', type=str, required=False, help="Path to the performance file")
     parser.add_argument('--output_dir', type=str, required=True, help="Directory where output will be saved")
