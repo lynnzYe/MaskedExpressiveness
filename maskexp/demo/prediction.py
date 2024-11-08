@@ -89,7 +89,7 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
     :param file_stem:
     :return:
     """
-    if (score_path is None) != (score_midi_path is None):
+    if (score_path is None) == (score_midi_path is None):
         raise ValueError("score_path or ref_midi_path should be passed in, but not both!")
     if not os.path.exists('AlignmentTool/Programs'):
         build_alignment_tool()
