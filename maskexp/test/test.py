@@ -543,6 +543,7 @@ def render_contextual_seq(midi_path, ckpt_path=None, mask_mode='all', overlap=.5
     """
     if ckpt_path is None:
         raise ValueError("Config path must be provided")
+    assert os.path.exists(ckpt_path)
     pth = load_torch_model(ckpt_path)
     cfg = ExpConfig.load_from_dict(pth)
     perf_config = performance_model.default_configs[cfg.perf_config_name]

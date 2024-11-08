@@ -48,17 +48,19 @@ Program Arguments:
   of the
   score. This usually leads to better alignment result, given that the performance is an incomplete fraction of the
   musical piece.
-  - if `ref_midi_path` is used, `score_path` should be omitted.
+    - if `ref_midi_path` is used, `score_path` should be omitted.
 - `output_dir`: directory for writing the predicted performance
 - `file_stem`: file name (without extension)
+- `ckpt_path`: path to the torch model checkpoint
 
 ```shell
 python maskexp/demo/prediction.py \ 
    --score_path [PATH_TO_XML_SCORE] \
    --performance_path [PATH_TO_MIDI] \
-   # --ref_midi_path [PATH_TO_MIDI] \  
+   # --ref_midi_path [PATH_TO_MIDI] \ # use score_path or ref_midi_path
    --output_dir [ABSOLUTE_PATH] \
-   --file_stem [FILE_NAME]
+   --file_stem [FILE_NAME] \
+   --ckpt_path [CKPT_PATH]
 ```
 
 ## License
@@ -66,4 +68,5 @@ python maskexp/demo/prediction.py \
 This repository is licensed under the MIT License. However, it includes portions of code from the Magenta project,
 which are stored in the magenta folder and licensed under the Apache License 2.0.
 Their usage is subject to the terms of the Apache License 2.0.
-
+The project also includes a copy of Nakamura et al.'s [symbolic music alignment tool](https://midialignment.github.io/demo.html), which
+uses the MIT license. 

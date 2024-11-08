@@ -38,6 +38,7 @@ def midify(fmt3x_file, match_file, spr_file, filestem='perf_pred'):
                   "Convert the xml to MIDI using Musescore, for example")
 
     med_midi_list, midi_list = find_missing_midi(score_info, match_info, spr_info)
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     write_coop_midi(med_midi_list, midi_list, os.path.join(OUTPUT_DIR, filestem + '.mid'))
 
 
@@ -76,7 +77,7 @@ def run_midi_alignment(ref_midi, match_midi):
     os.chdir(og_dir)
 
 
-def pred_performance(performance_path, score_path, score_midi_path, output_dir, file_stem):
+def pred_performance(performance_path, score_path, score_midi_path, output_dir, file_stem, model_path):
     """
     Predict the velocity of missing note events given an initial condition.
 
@@ -86,6 +87,7 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
                             use this mode (MIDI alignment) when score alignment does not work well
     :param output_dir:
     :param file_stem:
+    :param model_path: path to the pytorch model checkpoint
     :return:
     """
     og_dir = os.getcwd()
@@ -120,8 +122,7 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
 
     os.chdir(og_dir)
     midi_path = os.path.join(OUTPUT_DIR, file_stem + '.mid')
-    ckpt_path = os.path.join(SAVE_DIR, 'checkpoints', 'kg_rawmlm.pth')
-    render_contextual_seq(midi_path, ckpt_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
+    render_contextual_seq(midi_path, model_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
     # render_seq(midi_path, ckpt_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
 
 
@@ -165,9 +166,10 @@ def test_main():
     ref_midi_path = '/Users/kurono/Desktop/schu_score.mid'
     output_dir = '/Users/kurono/Desktop'
     file_stem = 'test_main'
+    ckpt_path = SAVE_DIR + "/checkpoints/kg_rawmlm.pth"
 
     # pred_performance(performance_path, score_path, None, output_dir, file_stem)
-    pred_performance(performance_path, None, ref_midi_path, output_dir, file_stem)
+    pred_performance(performance_path, None, ref_midi_path, output_dir, file_stem, )
 
 
 def main():
@@ -180,12 +182,14 @@ def main():
     parser.add_argument('--ref_midi_path', type=str, required=False, help="Path to the performance file")
     parser.add_argument('--output_dir', type=str, required=True, help="Directory where output will be saved")
     parser.add_argument('--file_stem', type=str, required=True, help="The file stem for output file naming")
+    parser.add_argument('--ckpt_path', type=str, required=True, help="The path to torch model checkpoint")
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    pred_performance(args.performance_path, args.score_path, args.ref_midi_path, args.output_dir, args.file_stem)
+    pred_performance(args.performance_path, args.score_path, args.ref_midi_path, args.output_dir, args.file_stem,
+                     args.ckpt_path)
 
 
 if __name__ == '__main__':
