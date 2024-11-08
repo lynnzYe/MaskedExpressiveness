@@ -51,6 +51,9 @@ Program Arguments:
 - `file_stem`: file name (without extension)
 - `ckpt_path`: path to the torch model checkpoint
 
+You can download the pretrained model from
+this [link](https://drive.google.com/file/d/1XNj1tU4aGG-k38FLXtXtm5joxYms530q/view?usp=drive_link).
+
 ```shell
 python maskexp/demo/prediction.py \ 
    --score_path [PATH_TO_XML_SCORE] \
@@ -66,5 +69,6 @@ python maskexp/demo/prediction.py \
 This repository is licensed under the MIT License. However, it includes portions of code from the Magenta project,
 which are stored in the magenta folder and licensed under the Apache License 2.0.
 Their usage is subject to the terms of the Apache License 2.0.
-The project also includes a copy of Nakamura et al.'s [symbolic music alignment tool](https://midialignment.github.io/demo.html), which
+The project also includes a copy of Nakamura et
+al.'s [symbolic music alignment tool](https://midialignment.github.io/demo.html), which
 uses the MIT license. 
