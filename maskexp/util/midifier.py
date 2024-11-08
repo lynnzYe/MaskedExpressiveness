@@ -5,6 +5,9 @@
 from logging import warning
 import random
 
+import numpy as np
+from mpmath.libmp.libelefun import machin
+
 from maskexp.util.alignment_parser import MatchFileParser, ScoreParser, SprParser
 import pretty_midi
 from dataclasses import dataclass
@@ -40,6 +43,23 @@ def _infer_time(target_y, onset1, stime1, onset2, stime2):
     return onset, offset
 
 
+def calculate_idx_map(spr_info, match_info):
+    """
+    A perfectly aligned MIDI will have one-to-one mapping in spr_info and match_info.
+    However, this may not be the case. Correct alignment between spr and match info
+        is required to infer aligned MIDI time
+    :param spr_info:
+    :param match_info:
+    :return: array of indices, index = match_info index, value = spr_info index
+    """
+    if len(spr_info.sorted_notes) == len(match_info.sorted_match_notes):
+        return np.arange(0, len(spr_info.sorted_notes))  # Identity
+    idx_list = []
+    for e in match_info.sorted_match_notes:
+        idx_list.append(int(e['note_id'].split('P1-1-')[-1]))
+    return idx_list
+
+
 def infer_aligned_midi_time(score_onset_time, score_offset_time, match_info: MatchFileParser, spr_info: SprParser,
                             random_shift=False):
     """
@@ -53,13 +73,13 @@ def infer_aligned_midi_time(score_onset_time, score_offset_time, match_info: Mat
     :return:
     """
     # First, we need to find the closest performed onset to the score MIDI note
-    assert len(spr_info.sorted_notes) == len(match_info.sorted_match_notes)
+    idx_list = calculate_idx_map(spr_info, match_info)
     idx_search = 0
     for idx in reversed(range(len(match_info.sorted_match_notes))):
         note = match_info.sorted_match_notes[idx]
         if score_onset_time > note['onset_time'] + ONSET_DEVIANCE:
             break
-        idx_search = idx
+        idx_search = idx_list[idx]
 
     # Then we need to infer the onset time
     # - Assume that the best way to infer current tempo is by referring to the adjacent two notes (instead of distant)
@@ -288,6 +308,9 @@ def midify_midi_align(spr_info: SprParser, match_info: MatchFileParser):
     perf_midi_meta_list = []
     score_midi_meta_list = []
     assert len(spr_info.notes_by_id) >= len(match_info.matched_notes)
+    if len(spr_info.sorted_notes) != len(match_info.sorted_match_notes):
+        print("\x1B[33m[Warning]\033[0m Incomplete MIDI alignment. "
+              f"{len(match_info.sorted_match_notes) / len(spr_info.sorted_notes)} aligned")
 
     # Each Spr id map to exactly one score id, in order
     # First, loop the performed MIDI so that all of them are in the output MIDI
