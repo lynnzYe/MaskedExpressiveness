@@ -1,12 +1,9 @@
 import os
 import shutil
-from multiprocessing.managers import Value
 from pathlib import Path
 import argparse
 
-from pandas.io.pytables import performance_doc
-
-from maskexp.test.test import render_seq, render_contextual_seq
+from maskexp.test.test import render_contextual_seq
 from maskexp.util.alignment_parser import ScoreParser, MatchFileParser, SprParser
 from maskexp.util.midifier import find_missing_midi, write_coop_midi
 from maskexp.definitions import OUTPUT_DIR, SAVE_DIR, ROOT_DIR
@@ -89,32 +86,33 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
     :param file_stem:
     :return:
     """
+    align_folder = os.path.join(ROOT_DIR, 'maskexp', 'demo', 'AlignmentTool')
     if (score_path is None) == (score_midi_path is None):
         raise ValueError("score_path or ref_midi_path should be passed in, but not both!")
     if not os.path.exists('AlignmentTool/Programs'):
         build_alignment_tool()
-    Path('AlignmentTool/data').mkdir(exist_ok=True)
+    Path(align_folder + '/data').mkdir(exist_ok=True)
     assert os.path.exists(performance_path)
-    shutil.copy(performance_path, 'AlignmentTool/data')
-    perf_file = os.path.join('data', os.path.basename(performance_path).split('.')[0])
+    shutil.copy(performance_path, align_folder + '/data')
+    perf_file = os.path.join(align_folder + '/data', os.path.basename(performance_path).split('.')[0])
 
     if score_path is None:
-        shutil.copy(score_midi_path, 'AlignmentTool/data')
-        score_midi = os.path.join('data', os.path.basename(score_midi_path).split('.')[0])
+        shutil.copy(score_midi_path, align_folder + '/data')
+        score_midi = os.path.join(align_folder + '/data', os.path.basename(score_midi_path).split('.')[0])
         run_midi_alignment(perf_file, score_midi)
 
-        fmt3x_file = os.path.join('AlignmentTool', perf_file + "_fmt3x.txt")
-        match_file = os.path.join('AlignmentTool', score_midi + '_match.txt')
-        spr_file = os.path.join('AlignmentTool', perf_file + '_spr.txt')
+        fmt3x_file = os.path.join(align_folder, perf_file + "_fmt3x.txt")
+        match_file = os.path.join(align_folder, score_midi + '_match.txt')
+        spr_file = os.path.join(align_folder, perf_file + '_spr.txt')
         midify(fmt3x_file, match_file, spr_file, filestem=file_stem)
 
     else:
-        shutil.copy(score_path, 'AlignmentTool/data')
-        score_file = os.path.join('data', os.path.basename(score_path).split('.')[0])
+        shutil.copy(score_path, align_folder + '/data')
+        score_file = os.path.join(align_folder + '/data', os.path.basename(score_path).split('.')[0])
         run_score_alignment(score_file, perf_file)
 
-        fmt3x_file = os.path.join('AlignmentTool', score_file + "_fmt3x.txt")
-        match_file = os.path.join('AlignmentTool', perf_file + '_match.txt')
+        fmt3x_file = os.path.join(align_folder, score_file + "_fmt3x.txt")
+        match_file = os.path.join(align_folder, perf_file + '_match.txt')
         midify(fmt3x_file, match_file, None, filestem=file_stem)
 
     midi_path = os.path.join(OUTPUT_DIR, file_stem + '.mid')

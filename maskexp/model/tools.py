@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import functools
 import os
-import note_seq
 import json
 from inspect import signature
 from maskexp.definitions import IGNORE_LABEL_INDEX, DEFAULT_MASK_EVENT, VELOCITY_MASK_EVENT

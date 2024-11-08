@@ -10,7 +10,6 @@ import torch
 import tqdm
 from sklearn.metrics import cohen_kappa_score
 from fastdtw import fastdtw
-from scipy.spatial.distance import euclidean
 
 from maskexp.util.play_midi import syn_perfevent, decode_output_ids, write_ids_to_midi, write_token_to_midi
 from maskexp.definitions import OUTPUT_DIR, SAVE_DIR, VELOCITY_MASK_EVENT, NDEBUG
