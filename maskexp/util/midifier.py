@@ -3,13 +3,7 @@
 @brief: using match file and score info, fill in the missing midi notes
 """
 from logging import warning
-from nis import match
 import random
-
-from bokeh.sampledata.sprint import sprint
-from keras.src.legacy.preprocessing.image import random_shift
-from scipy.stats import alpha
-from tensorflow.python.framework.errors_impl import OutOfRangeError
 
 from maskexp.util.alignment_parser import MatchFileParser, ScoreParser, SprParser
 import pretty_midi

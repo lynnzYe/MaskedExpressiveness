@@ -25,7 +25,8 @@ tqdm
 fluidsynth
 pyfluidsynth
 scikit-learn
+note_seq
 transformers
-datasets
-zlib
+fastdtw
+pandas
 attrs

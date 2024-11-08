@@ -8,7 +8,7 @@ from pandas.io.pytables import performance_doc
 from maskexp.test.test import render_seq, render_contextual_seq
 from maskexp.util.alignment_parser import ScoreParser, MatchFileParser, SprParser
 from maskexp.util.midifier import find_missing_midi, write_coop_midi
-from maskexp.definitions import OUTPUT_DIR, SAVE_DIR
+from maskexp.definitions import OUTPUT_DIR, SAVE_DIR, ROOT_DIR
 
 
 def midify(fmt3x_file, match_file, spr_file, filestem='perf_pred'):
@@ -43,7 +43,7 @@ def midify(fmt3x_file, match_file, spr_file, filestem='perf_pred'):
 
 def build_alignment_tool():
     og_dir = os.getcwd()
-    os.chdir('AlignmentTool')
+    os.chdir(os.path.join(ROOT_DIR, 'maskexp', 'demo', 'AlignmentTool'))
     os.system('./compile.sh')
     os.chdir(og_dir)
 
