@@ -43,6 +43,7 @@ def midify(fmt3x_file, match_file, spr_file, filestem='perf_pred'):
 
 
 def build_alignment_tool():
+    print("\x1B[34m[Info]\033[0m Building symbolic music alignment tool")
     og_dir = os.getcwd()
     os.chdir(os.path.join(ROOT_DIR, 'maskexp', 'demo', 'AlignmentTool'))
     os.system('./compile.sh')
@@ -90,6 +91,7 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
     :param model_path: path to the pytorch model checkpoint
     :return:
     """
+    print("\x1B[34m[Info]\033[0m Interactive demo running...")
     og_dir = os.getcwd()
     os.chdir(ALIGN_TOOL_DIR)
     if (score_path is None) == (score_midi_path is None):

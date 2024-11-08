@@ -7,7 +7,7 @@ import os
 import note_seq
 import numpy as np
 import torch
-import tqdm
+from tqdm import tqdm
 from sklearn.metrics import cohen_kappa_score
 from fastdtw import fastdtw
 
@@ -120,7 +120,7 @@ def get_mlm_metrics(test_settings: ExpConfig = None):
 def run_mlm_test(ckpt_path, test_times=100):
     cfg = ExpConfig.load_from_dict(load_torch_model(ckpt_path))
     metrics = []
-    for i in tqdm.tqdm(range(test_times)):
+    for i in tqdm(range(test_times)):
         metrics.append(get_mlm_metrics(test_settings=cfg))
     avg_metric = {key: 0 for key in metrics[0].keys()}
     for e in metrics:
@@ -395,7 +395,7 @@ def run_contextual_mlm_pred(pth, inputs, masks, overlap=0.5, step_percent=0.1):
 
     while True:
         round_status = []
-        for i_input, (input_ids, mask) in enumerate(zip(inputs, masks)):
+        for i_input, (input_ids, mask) in enumerate(tqdm(zip(inputs, masks), total=len(inputs))):
             # TODO @Bmois remove debug code
             test_ids = input_ids.clone()
             pred_ids, status = step_contextual_velocity_mlm_pred(model, input_ids, mask,
@@ -750,7 +750,7 @@ def test_eval_full_midi(midi_path, ckpt_path, mask_all=False, overlap=0.5, n_tri
     else:
         funcs = get_context_funcs(ckpt_path, mask_all=mask_all, overlap=overlap)
     scores = []
-    for i in tqdm.tqdm(range(n_trials)):
+    for i in tqdm(range(n_trials)):
         torch.manual_seed(i)
         random.seed(i)
         scores.append(eval_full_midi(midi_path, *funcs))
