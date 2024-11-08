@@ -1,5 +1,3 @@
-from sympy.physics.units import years
-
 # Masked Expressiveness: Conditioned Generation of Piano Key Striking Velocity Using Masked Language Modeling
 
 ---
