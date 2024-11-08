@@ -1,0 +1,201 @@
+//Version: ScorePerfmMatch_v170503
+// Score: ./test/ChopinPrelude-Rachmaninoff-Piano_hmm.txt
+// Perfm: ./test/melody_only_spr.txt
+// fmt3x: ./test/ChopinPrelude-Rachmaninoff-Piano_fmt3x.txt
+0	3.363542	4.631250	G4	89	80	0	0	0	P1-1-4	0	0
+1	4.513542	5.913542	Ab4	93	80	0	0	4	P1-1-8	0	-
+2	5.822917	7.197917	G4	85	80	0	0	8	P1-1-16	0	-
+3	6.806250	7.197917	F4	97	80	0	0	11	P1-1-18	0	-
+4	7.138542	8.538542	Eb4	89	80	0	0	12	P1-1-14	0	-
+5	8.547917	9.822917	Eb4	85	80	0	0	16	P1-2-4	0	-
+6	9.806250	11.097917	F4	85	80	0	0	20	P1-2-8	0	-
+7	11.106250	12.447917	Eb4	89	80	0	0	24	P1-2-10	0	-
+8	12.047917	13.713542	Db4	77	80	0	0	27	P1-2-12	0	-
+9	12.356250	13.713542	C4	81	80	0	0	28	P1-2-16	0	-
+10	13.622917	14.863542	D4	89	80	0	0	32	P1-3-4	0	-
+11	14.797917	16.056250	E4	93	80	0	0	36	P1-3-9	0	-
+12	15.988542	17.388542	G4	89	80	0	0	40	P1-3-10	0	-
+13	16.881250	17.388542	F4	89	80	0	0	43	P1-3-11	0	-
+14	17.231250	18.506250	Eb4	93	80	0	0	44	P1-3-14	1	-
+15	18.463542	19.713542	D4	85	80	0	0	48	P1-4-3	0	-
+16	19.631250	21.081250	G4	77	80	0	0	52	P1-4-7	0	-
+17	21.006250	22.422917	B4	89	80	0	0	56	P1-4-8	0	-
+18	21.947917	22.422917	A4	61	80	0	0	59	P1-4-9	0	-
+19	22.356250	24.072917	G4	65	80	0	0	60	P1-4-12	0	-
+20	24.063542	25.322917	Eb5	57	80	0	0	64	P1-5-3	0	-
+21	25.322917	26.647917	Eb5	65	80	0	0	68	P1-5-6	0	-
+22	26.588542	27.872917	D5	69	80	0	0	72	P1-5-8	0	-
+23	27.872917	29.322917	D5	57	80	0	0	76	P1-5-11	0	-
+24	29.188542	30.906250	C5	65	80	0	0	80	P1-6-3	0	-
+25	30.481250	32.006250	D5	73	80	0	0	84	P1-6-7	0	-
+26	31.863542	33.347917	B4	73	80	0	0	88	P1-6-10	0	-
+27	32.822917	33.681250	A4	65	80	0	0	91	P1-6-12	0	-
+28	33.206250	34.738542	G4	73	80	0	0	92	P1-6-15	0	-
+29	34.706250	36.113542	C5	77	80	0	0	96	P1-7-3	0	-
+30	36.013542	37.522917	Ab4	73	80	0	0	100	P1-7-6	0	-
+31	37.406250	40.647917	G4	73	80	0	0	104	P1-7-7	0	-
+32	38.456250	39.363542	F4	61	80	0	0	107	P1-7-8	0	-
+33	38.897917	40.597917	Eb4	57	80	0	0	108	P1-7-11	0	-
+34	40.597917	42.372917	Eb4	57	80	0	0	112	P1-8-4	0	-
+35	42.197917	44.331250	F4	57	80	0	0	116	P1-8-8	0	-
+36	43.931250	46.047917	Eb4	61	80	0	0	120	P1-8-9	0	-
+37	45.081250	46.047917	D4	49	80	0	0	123	P1-8-10	0	-
+38	45.856250	48.072917	C4	49	80	0	0	124	P1-8-13	0	-
+39	48.063542	52.097917	C5	77	80	0	0	128	P1-9-4	0	-
+//Missing 0	P1-1-1
+//Missing 0	P1-1-2
+//Missing 0	P1-1-3
+//Missing 0	P1-1-19
+//Missing 0	P1-1-20
+//Missing 4	P1-1-5
+//Missing 4	P1-1-6
+//Missing 4	P1-1-7
+//Missing 4	P1-1-21
+//Missing 4	P1-1-22
+//Missing 8	P1-1-9
+//Missing 8	P1-1-10
+//Missing 8	P1-1-15
+//Missing 8	P1-1-23
+//Missing 8	P1-1-24
+//Missing 11	P1-1-17
+//Missing 12	P1-1-11
+//Missing 12	P1-1-12
+//Missing 12	P1-1-13
+//Missing 12	P1-1-25
+//Missing 12	P1-1-26
+//Missing 12	P1-1-27
+//Missing 16	P1-2-1
+//Missing 16	P1-2-2
+//Missing 16	P1-2-3
+//Missing 16	P1-2-20
+//Missing 16	P1-2-21
+//Missing 20	P1-2-5
+//Missing 20	P1-2-6
+//Missing 20	P1-2-7
+//Missing 20	P1-2-22
+//Missing 20	P1-2-23
+//Missing 24	P1-2-9
+//Missing 24	P1-2-17
+//Missing 24	P1-2-18
+//Missing 24	P1-2-19
+//Missing 24	P1-2-24
+//Missing 24	P1-2-25
+//Missing 27	P1-2-11
+//Missing 28	P1-2-13
+//Missing 28	P1-2-14
+//Missing 28	P1-2-15
+//Missing 28	P1-2-26
+//Missing 28	P1-2-27
+//Missing 32	P1-3-1
+//Missing 32	P1-3-2
+//Missing 32	P1-3-3
+//Missing 32	P1-3-17
+//Missing 32	P1-3-18
+//Missing 36	P1-3-5
+//Missing 36	P1-3-6
+//Missing 36	P1-3-7
+//Missing 36	P1-3-8
+//Missing 36	P1-3-19
+//Missing 36	P1-3-20
+//Missing 40	P1-3-15
+//Missing 40	P1-3-16
+//Missing 40	P1-3-21
+//Missing 40	P1-3-22
+//Missing 44	P1-3-12
+//Missing 44	P1-3-13
+//Missing 44	P1-3-23
+//Missing 44	P1-3-24
+//Missing 48	P1-4-1
+//Missing 48	P1-4-2
+//Missing 48	P1-4-16
+//Missing 48	P1-4-17
+//Missing 48	P1-4-18
+//Missing 52	P1-4-4
+//Missing 52	P1-4-5
+//Missing 52	P1-4-6
+//Missing 52	P1-4-19
+//Missing 52	P1-4-20
+//Missing 56	P1-4-13
+//Missing 56	P1-4-14
+//Missing 56	P1-4-15
+//Missing 56	P1-4-21
+//Missing 56	P1-4-22
+//Missing 60	P1-4-10
+//Missing 60	P1-4-11
+//Missing 60	P1-4-23
+//Missing 60	P1-4-24
+//Missing 64	P1-5-1
+//Missing 64	P1-5-2
+//Missing 64	P1-5-14
+//Missing 64	P1-5-15
+//Missing 68	P1-5-4
+//Missing 68	P1-5-5
+//Missing 68	P1-5-16
+//Missing 68	P1-5-17
+//Missing 72	P1-5-7
+//Missing 72	P1-5-12
+//Missing 72	P1-5-18
+//Missing 72	P1-5-19
+//Missing 75	P1-5-13
+//Missing 76	P1-5-9
+//Missing 76	P1-5-10
+//Missing 76	P1-5-20
+//Missing 76	P1-5-21
+//Missing 80	P1-6-1
+//Missing 80	P1-6-2
+//Missing 80	P1-6-16
+//Missing 80	P1-6-17
+//Missing 84	P1-6-4
+//Missing 84	P1-6-5
+//Missing 84	P1-6-6
+//Missing 84	P1-6-18
+//Missing 84	P1-6-19
+//Missing 88	P1-6-8
+//Missing 88	P1-6-9
+//Missing 88	P1-6-20
+//Missing 88	P1-6-21
+//Missing 91	P1-6-11
+//Missing 92	P1-6-13
+//Missing 92	P1-6-14
+//Missing 92	P1-6-22
+//Missing 92	P1-6-23
+//Missing 96	P1-7-1
+//Missing 96	P1-7-2
+//Missing 96	P1-7-14
+//Missing 96	P1-7-15
+//Missing 100	P1-7-4
+//Missing 100	P1-7-5
+//Missing 100	P1-7-16
+//Missing 100	P1-7-17
+//Missing 104	P1-7-12
+//Missing 104	P1-7-13
+//Missing 104	P1-7-18
+//Missing 104	P1-7-19
+//Missing 108	P1-7-9
+//Missing 108	P1-7-10
+//Missing 108	P1-7-20
+//Missing 108	P1-7-21
+//Missing 112	P1-8-1
+//Missing 112	P1-8-2
+//Missing 112	P1-8-3
+//Missing 112	P1-8-17
+//Missing 112	P1-8-18
+//Missing 116	P1-8-5
+//Missing 116	P1-8-6
+//Missing 116	P1-8-7
+//Missing 116	P1-8-19
+//Missing 116	P1-8-20
+//Missing 120	P1-8-14
+//Missing 120	P1-8-15
+//Missing 120	P1-8-16
+//Missing 120	P1-8-21
+//Missing 120	P1-8-22
+//Missing 124	P1-8-11
+//Missing 124	P1-8-12
+//Missing 124	P1-8-23
+//Missing 124	P1-8-24
+//Missing 128	P1-9-1
+//Missing 128	P1-9-2
+//Missing 128	P1-9-3
+//Missing 128	P1-9-5
+//Missing 128	P1-9-6

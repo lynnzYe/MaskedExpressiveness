@@ -6,8 +6,6 @@ from maskexp.model.tools import print_perf_seq, decode_batch_perf_logits, MAX_SE
     save_checkpoint, load_torch_model
 from maskexp.model.bert import NanoBertMLM
 from maskexp.magenta.models.performance_rnn import performance_model
-import os
-import pickle
 import torch
 import tqdm
 import note_seq

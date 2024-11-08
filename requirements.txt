@@ -20,12 +20,13 @@ tensorflow_datasets==4.9.6
 tensorflow_gan==2.1.0
 tensorflow_probability==0.24.0
 tf_slim==1.1.0
-torch
+torch==2.4.0
 tqdm
 fluidsynth
 pyfluidsynth
 scikit-learn
+note_seq
 transformers
-datasets
-zlib
+fastdtw
+pandas
 attrs
