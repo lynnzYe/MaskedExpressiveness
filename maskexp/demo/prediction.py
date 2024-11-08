@@ -1,4 +1,4 @@
-import os.path
+import os
 import shutil
 from pathlib import Path
 import argparse
@@ -23,7 +23,6 @@ def midify(fmt3x_file, match_file, spr_file, filestem='perf_pred'):
     score_info.parse_file(fmt3x_file)
     match_info = MatchFileParser()
     match_info.parse_file(match_file)
-
     if spr_file is not None:
         spr_info = SprParser()
         spr_info.parse_file(spr_file)
@@ -93,6 +92,7 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
     if not os.path.exists('AlignmentTool/Programs'):
         build_alignment_tool()
     Path('AlignmentTool/data').mkdir(exist_ok=True)
+    assert os.path.exists(performance_path)
     shutil.copy(performance_path, 'AlignmentTool/data')
     perf_file = os.path.join('data', os.path.basename(performance_path).split('.')[0])
 
@@ -194,5 +194,5 @@ if __name__ == '__main__':
     # TODO @Bmois move this to Readme.md
 
     # test_run_alignment()
-    test_main()
-    # main()
+    # test_main()
+    main()

@@ -441,11 +441,14 @@ def mask_all_velocity_ids(token_ids, perf_config):
 
 def mask_some_velocity_ids(token_ids, perf_config, mask_prob=0.9):
     mask_id = perf_config.encoder_decoder._one_hot_encoding.encode_event(VELOCITY_MASK_EVENT)
+    count = 1
     for i, e in enumerate(token_ids):
         event = perf_config.encoder_decoder._one_hot_encoding.decode_event(e)
-        prob = random.random()
-        if event.event_type == note_seq.PerformanceEvent.VELOCITY and prob < mask_prob:
-            token_ids[i] = mask_id
+        if event.event_type == note_seq.PerformanceEvent.VELOCITY:
+            count += 1
+            prob = random.random()
+            if prob < mask_prob:
+                token_ids[i] = mask_id
     return token_ids
 
 
@@ -496,10 +499,10 @@ def render_seq(midi_path, ckpt_path=None, mask_mode='all', file_stem='demo1', ou
     pth = load_torch_model(ckpt_path)
     cfg = ExpConfig.load_from_dict(pth)
     perf_config = performance_model.default_configs[cfg.perf_config_name]
-
-    clean_midi_path = os.path.join(OUTPUT_DIR, 'tmp_' + os.path.basename(midi_path))
-    midi_cleanup(midi_path, clean_midi_path)
-    tokens = extract_complete_tokens(clean_midi_path, perf_config, max_seq=None)
+    # clean_midi_path = os.path.join(OUTPUT_DIR, 'tmp_' + os.path.basename(midi_path))
+    # midi_cleanup(midi_path, clean_midi_path)
+    tokens = extract_complete_tokens(midi_path, perf_config, max_seq=None)
+    # tokens = extract_complete_tokens(clean_midi_path, perf_config, max_seq=None)
     tokens = mask_tokens(tokens, perf_config=perf_config, mask_mode=mask_mode)
     if not NDEBUG:
         masked_perf = decode_output_ids(tokens, perf_config.encoder_decoder._one_hot_encoding)
@@ -786,13 +789,13 @@ if __name__ == '__main__':
     """
     Applications / Demo
     """
-    seed = 0
-    midi_path = '/Users/kurono/Desktop/test_main.mid'
+    seed = 1
+    midi_path = '/Users/kurono/Desktop/02714_BminorAllamande.mid'
     ckpt_path = '/Users/kurono/Documents/python/GEC/ExpressiveMLM/save/checkpoints/kg_rawmlm.pth'
-    mask_mode = 'all'
+    mask_mode = 'some'
 
-    torch.manual_seed(0)
-    random.seed(0)
+    torch.manual_seed(seed)
+    random.seed(seed)
 
     # render_seq(midi_path=midi_path,
     #            ckpt_path=ckpt_path,
