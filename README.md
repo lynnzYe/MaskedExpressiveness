@@ -27,6 +27,7 @@ from sympy.physics.units import years
 conda create -n maskexp python=3.11 -y
 conda activate maskexp
 pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Interactive Demo
