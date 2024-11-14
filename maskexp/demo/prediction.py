@@ -78,25 +78,13 @@ def run_midi_alignment(ref_midi, match_midi):
     os.chdir(og_dir)
 
 
-def pred_performance(performance_path, score_path, score_midi_path, output_dir, file_stem, model_path):
-    """
-    Predict the velocity of missing note events given an initial condition.
-
-    :param performance_path: absolute path to the performance (midi file). same as above
-    :param score_path: absolute path to the score. will be copied and stored in AlignmentTool/data
-    :param score_midi_path: absolute path to the score MIDI
-                            use this mode (MIDI alignment) when score alignment does not work well
-    :param output_dir:
-    :param file_stem:
-    :param model_path: path to the pytorch model checkpoint
-    :return:
-    """
+def generate_aligned_midi(score_path, score_midi_path, performance_path, file_stem):
     print("\x1B[34m[Info]\033[0m Interactive demo running...")
     og_dir = os.getcwd()
     os.chdir(ALIGN_TOOL_DIR)
     if (score_path is None) == (score_midi_path is None):
         raise ValueError("score_path or ref_midi_path should be passed in, but not both!")
-    if not os.path.exists('AlignmentTool/Programs'):
+    if not os.path.exists('Programs'):
         build_alignment_tool()
     Path('data').mkdir(exist_ok=True)
     assert os.path.exists(performance_path)
@@ -123,6 +111,23 @@ def pred_performance(performance_path, score_path, score_midi_path, output_dir, 
         midify(fmt3x_file, match_file, None, filestem=file_stem)
 
     os.chdir(og_dir)
+
+
+def pred_performance(performance_path, score_path, score_midi_path, output_dir, file_stem, model_path):
+    """
+    Predict the velocity of missing note events given an initial condition.
+
+    :param performance_path: absolute path to the performance (midi file). same as above
+    :param score_path: absolute path to the score. will be copied and stored in AlignmentTool/data
+    :param score_midi_path: absolute path to the score MIDI
+                            use this mode (MIDI alignment) when score alignment does not work well
+    :param output_dir:
+    :param file_stem:
+    :param model_path: path to the pytorch model checkpoint
+    :return:
+    """
+    generate_aligned_midi(score_path=score_path, score_midi_path=score_midi_path, performance_path=performance_path,
+                          file_stem=file_stem)
     midi_path = os.path.join(OUTPUT_DIR, file_stem + '.mid')
     render_contextual_seq(midi_path, model_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
     # render_seq(midi_path, ckpt_path, mask_mode='min', output_path=output_dir, file_stem=file_stem)
@@ -202,6 +207,10 @@ if __name__ == '__main__':
     # - if not is_offset and velocity_bin != current_velocity_bin:
     # + if not is_offset:
     # TODO @Bmois move this to Readme.md
+
+    # generate_aligned_midi(score_path=None, score_midi_path='/Users/kurono/Desktop/schu_score.mid',
+    #                       performance_path='/Users/kurono/Desktop/schu_main.mid',
+    #                       file_stem='pneno_demo')
 
     # test_run_alignment()
     # test_main()
