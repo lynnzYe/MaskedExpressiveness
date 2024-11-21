@@ -6,7 +6,6 @@ from logging import warning
 import random
 
 import numpy as np
-from mpmath.libmp.libelefun import machin
 
 from maskexp.util.alignment_parser import MatchFileParser, ScoreParser, SprParser
 import pretty_midi

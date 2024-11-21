@@ -1,14 +1,9 @@
-from maskexp.util.tokenize_midi import extract_tokens_from_midi
-from maskexp.definitions import DATA_DIR
 import torch
 from note_seq import PerformanceEvent as Perf
 from maskexp.magenta.models.performance_rnn import performance_model
 from maskexp.model.create_dataset import generate_maestro_dataset
 import pickle
 import tqdm
-import os
-import numpy as np
-import json
 import matplotlib.pyplot as plt
 
 

@@ -68,7 +68,7 @@ def run_midi_alignment(ref_midi, match_midi):
     MIDI to MIDI alignment
     :param ref_midi:     the MIDI as the reference for matching
                             this is usually the user input, because empirically
-                            matching a dense MIDI to a sparse performance performs better than the reverse
+                            matching a sparse performance to a dense MIDI performs better than the reverse
     :param match_midi:   the MIDI to be matched
     :return:
     """
@@ -167,7 +167,8 @@ def test_run_alignment():
 
 def test_main():
     # score_path = '/Users/kurono/Desktop/Chop.xml'
-    score_path = '/Users/kurono/Desktop/schu.xml'
+    # score_path = '/Users/kurono/Desktop/schu.xml'
+    score_path = None
     # performance_path = '/Users/kurono/Desktop/Chop.mid'
     performance_path = '/Users/kurono/Desktop/schu.mid'
     ref_midi_path = '/Users/kurono/Desktop/schu_score.mid'
@@ -176,7 +177,8 @@ def test_main():
     ckpt_path = SAVE_DIR + "/checkpoints/kg_rawmlm.pth"
 
     # pred_performance(performance_path, score_path, None, output_dir, file_stem)
-    pred_performance(performance_path, None, ref_midi_path, output_dir, file_stem, )
+    pred_performance(performance_path=performance_path, score_path=score_path, score_midi_path=ref_midi_path,
+                     output_dir=output_dir, file_stem=file_stem, model_path=ckpt_path)
 
 
 def main():
